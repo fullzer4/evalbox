@@ -1,0 +1,30 @@
+[package]
+name = "pyenclave-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pyenclave_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+# PyO3: extensão Python
+pyo3 = { version = "0.21", features = ["abi3-py38", "extension-module"] }
+
+# Syscalls/OS
+rustix = "0.38"
+nix = { version = "0.28", default-features = false, features = ["process", "mount", "fs", "signal", "ucontext"] }
+libc = "0.2"
+
+# Políticas (opcionais; escolha crates conforme preferir, ou implementações diretas)
+prctl = "1.0"                 # PR_SET_NO_NEW_PRIVS, PR_SET_PDEATHSIG, etc.
+# landlock = "0.3"            # exemplo; verifique o crate que preferir
+# cgroups-rs = "0.3"          # opcional p/ cgroups v2
+
+# Logs (opcional)
+log = "0.4"
+
+[features]
+# Gate para recursos opcionais
+landlock = []
+cgroups = []
