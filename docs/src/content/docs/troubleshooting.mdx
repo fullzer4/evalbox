@@ -1,8 +1,0 @@
----
-title: Troubleshooting
----
-
-- KVM not available: enable virtualization in BIOS/UEFI and ensure `/dev/kvm` exists. Check user/group permissions to access it.
-- Missing tools: install `krunvm`, `buildah`, and optionally `skopeo` via your distro.
-- Image import errors: try `skopeo copy` manually or ensure containers-storage is accessible. Rootless users can verify with `buildah images`.
-- Timeouts: increase `timeout` in `flashvm.run(...)` or inspect stderr for hints.

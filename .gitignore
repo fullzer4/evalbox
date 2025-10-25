@@ -1,55 +1,16 @@
-# Rust
-/target/
-Cargo.lock
-
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg-info/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env/
 dist/
 build/
-.tox/
-.venv/
-venv/
-.pytest_cache/
+*.egg-info/
 
-# Coverage reports
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-coverage.json
-reports/
-.nyc_output
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Cache específico do projeto
-.cache/
-*.log
-
-# Maturin
 target/
-.maturin/
+Cargo.lock
 
-# Temp files
-*.tmp
-*.temp
-
-# Benchmarks
-.benchmarks/
-
-# Docs
-node_modules/
-.astro/
+*.whl
+*.so
