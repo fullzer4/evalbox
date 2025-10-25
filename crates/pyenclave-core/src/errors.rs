@@ -1,4 +1,4 @@
-//! Erros tipados e mapeamento para PyErr (skeleton).
+//! Typed errors and mapping to PyErr.
 
 #[derive(thiserror::Error, Debug)]
 pub enum EnclaveError {

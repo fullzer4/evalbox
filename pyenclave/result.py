@@ -12,6 +12,8 @@ class ExecutionResult:
     reason: Optional[str] = None  # "ok" | "timeout" | "oom" | "seccomp" | "landlock" | "signal"
     stdout: bytes = field(default_factory=bytes)
     stderr: bytes = field(default_factory=bytes)
+    signal: Optional[int] = None
     cpu_time_ms: Optional[int] = None
     peak_rss_kb: Optional[int] = None
     logs: List[str] = field(default_factory=list)
+

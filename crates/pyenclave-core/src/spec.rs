@@ -1,4 +1,4 @@
-//! Tipos internos do RunSpec, MountPlan, PolicySpec e LimitSpec (skeleton).
+//! Internal types for RunSpec, MountPlan, PolicySpec and LimitSpec.
 
 #[derive(Debug, Clone, Default)]
 pub struct InterpreterSpec {
@@ -8,9 +8,11 @@ pub struct InterpreterSpec {
 
 #[derive(Debug, Clone, Default)]
 pub struct MountPlan {
-    // Ex.: vec![("host_path", "/inputs")]
+    /// Read-only mounts: vec![("host_path", "/guest_path")]
     pub ro: Vec<(String, String)>,
+    /// Read-write mounts: vec![("host_path", "/guest_path")]
     pub rw: Vec<(String, String)>,
+    /// Whether to create an ephemeral /tmp
     pub ephemeral_tmp: bool,
 }
 
@@ -38,7 +40,8 @@ pub struct RunSpec {
     pub limits: LimitSpec,
     pub cwd: Option<String>,
     pub umask: Option<u32>,
-    pub env: Vec<(String, String)>, // pares K=V
+    /// Environment variables as K=V pairs
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Default)]
