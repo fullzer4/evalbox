@@ -1,16 +1,14 @@
-"""
-API de alto nível (UX). Constrói o RunSpec e delega ao núcleo em Rust (pyenclave._core).
-"""
-
-from typing import Any, Dict, List, Optional, Union
-import sys
 import os
+import sys
+from typing import Dict, List, Optional, Union
+
+from .exceptions import ConfigurationError
 from .result import ExecutionResult
 
 try:
-    from . import _core  # extensão PyO3
-except Exception:  # pragma: no cover
-    _core = None  # stubs permitem importar sem compilar a extensão
+    from . import _core
+except ImportError:  # pragma: no cover
+    _core = None
 
 
 def run_python(
@@ -19,7 +17,7 @@ def run_python(
     script: Optional[str] = None,
     module: Optional[str] = None,
     args: Optional[List[str]] = None,
-    interpreter: Union[str, bytes] = "3.12",  # rótulo ("3.12") ou path absoluto
+    interpreter: Union[str, bytes] = "3.12",
     mounts: Optional[Dict[str, List[str]]] = None,
     stateless: bool = True,
     network: bool = False,
@@ -30,109 +28,48 @@ def run_python(
     threads: int = 1,
     env_overrides: Optional[Dict[str, str]] = None,
 ) -> ExecutionResult:
-    """
-    Executa código Python isolado em sandbox.
-    
+    """Execute Python code in an isolated sandbox.
+
     Args:
-        code: Código Python a executar (passado via -c)
-        script: Caminho para script Python a executar
-        module: Módulo Python a executar com -m
-        args: Argumentos adicionais para o script/módulo
-        interpreter: Rótulo de versão ("3.12") ou caminho absoluto do Python
-        mounts: Dict com 'ro' e 'rw' listas de [src, dst]
-        stateless: Se True, sem acesso ao filesystem do host
-        network: Se True, permite acesso à rede (padrão: False)
-        time_limit_s: Limite de tempo em segundos
-        memory_limit_mb: Limite de memória em MB
-        max_procs: Número máximo de processos
-        fsize_mb: Tamanho máximo de arquivo em MB
-        threads: Número de threads Python
-        env_overrides: Variáveis de ambiente customizadas
-    
+        code: Python code to execute (via -c flag)
+        script: Path to Python script file
+        module: Python module to run (via -m flag)
+        args: Additional arguments for script/module
+        interpreter: Version label ("3.12") or absolute path to Python binary
+        mounts: Mount specification dict with 'ro' and 'rw' lists
+        stateless: If True, no host filesystem access (default: True)
+        network: If True, allow network access (default: False)
+        time_limit_s: Maximum execution time in seconds
+        memory_limit_mb: Maximum memory usage in MB
+        max_procs: Maximum number of processes
+        fsize_mb: Maximum file size in MB
+        threads: Number of Python threads
+        env_overrides: Custom environment variables
+
     Returns:
-        ExecutionResult com exit_code, stdout, stderr, etc.
+        ExecutionResult with exit_code, stdout, stderr, and metadata
+
+    Raises:
+        ConfigurationError: If configuration is invalid
+        RuntimeError: If core extension is not available
     """
     if _core is None:
-        raise RuntimeError("pyenclave._core extension not available - did you compile with maturin?")
-    
-    # Validar que apenas uma forma de execução foi especificada
-    modes = sum([code is not None, script is not None, module is not None])
-    if modes == 0:
-        raise ValueError("Must specify one of: code, script, or module")
-    if modes > 1:
-        raise ValueError("Must specify only one of: code, script, or module")
-    
-    # Determinar caminho do intérprete
-    if isinstance(interpreter, bytes):
-        interpreter_path = interpreter.decode('utf-8')
-    elif os.path.isabs(interpreter):
-        interpreter_path = interpreter
-    else:
-        # Por enquanto, usar o Python atual
-        # TODO: usar env.discover_interpreters() para resolver labels como "3.12"
-        interpreter_path = sys.executable
-    
-    # Construir argv (SEM incluir o executável, pois o Rust adiciona automaticamente)
-    argv_list = ["-I"]  # -I: modo isolado (sem site packages)
-    
-    if code is not None:
-        argv_list.extend(["-c", code])
-    elif script is not None:
-        argv_list.append(script)
-    elif module is not None:
-        argv_list.extend(["-m", module])
-    
-    if args:
-        argv_list.extend(args)
-    
-    # Construir mounts
-    mounts_spec = {
-        "ro": [],
-        "rw": [],
-        "ephemeral_tmp": True,
-    }
-    
-    if mounts:
-        if "ro" in mounts:
-            mounts_spec["ro"] = mounts["ro"]
-        if "rw" in mounts:
-            mounts_spec["rw"] = mounts["rw"]
-    
-    # Construir policy
-    policy_spec = {
-        "seccomp_profile": "default",
-        "landlock": not network,  # Landlock se sem rede
-        "network": network,
-    }
-    
-    # Construir limits
-    limits_spec = {}
-    if time_limit_s is not None:
-        limits_spec["time_limit_s"] = time_limit_s
-    if memory_limit_mb is not None:
-        limits_spec["memory_limit_mb"] = memory_limit_mb
-    if max_procs is not None:
-        limits_spec["max_procs"] = max_procs
-    if fsize_mb is not None:
-        limits_spec["fsize_mb"] = fsize_mb
-    
-    # Construir environment
-    env_dict = {}
-    
-    # Variáveis padrão para Python isolado
-    env_dict["PYTHONDONTWRITEBYTECODE"] = "1"
-    env_dict["PYTHONUNBUFFERED"] = "1"
-    env_dict["PYTHONHASHSEED"] = "0"
-    
-    if threads > 1:
-        env_dict["OMP_NUM_THREADS"] = str(threads)
-        env_dict["OPENBLAS_NUM_THREADS"] = str(threads)
-    
-    # Aplicar overrides
-    if env_overrides:
-        env_dict.update(env_overrides)
-    
-    # Construir RunSpec
+        raise RuntimeError(
+            "pyenclave._core extension not available. "
+            "Compile with: maturin develop"
+        )
+
+    _validate_execution_mode(code, script, module)
+
+    interpreter_path = _resolve_interpreter(interpreter)
+    argv_list = _build_argv(code, script, module, args)
+    mounts_spec = _build_mounts_spec(mounts)
+    policy_spec = _build_policy_spec(network)
+    limits_spec = _build_limits_spec(
+        time_limit_s, memory_limit_mb, max_procs, fsize_mb
+    )
+    env_dict = _build_env_dict(threads, env_overrides)
+
     spec = {
         "interpreter": {
             "label": None,
@@ -146,11 +83,9 @@ def run_python(
         "umask": None,
         "env": env_dict,
     }
-    
-    # Chamar núcleo Rust
+
     result_dict = _core.run(spec)
-    
-    # Converter para ExecutionResult
+
     return ExecutionResult(
         exit_code=result_dict.get("exit_code"),
         stdout=result_dict.get("stdout", b""),
@@ -159,30 +94,169 @@ def run_python(
     )
 
 
-def list_interpreters() -> list:
+def list_interpreters() -> List[Dict[str, str]]:
+    """Discover available Python interpreters.
+
+    Scans common locations for Python installations including:
+    - System Python installations
+    - pyenv versions
+    - Conda environments
+    - Virtual environments
+
+    Returns:
+        List of interpreter info dicts with 'label' and 'path' keys
+
+    Note:
+        Currently returns empty list. Full discovery implementation pending.
     """
-    Descobre intérpretes (roots versionados e venvs/conda).
-    """
-    # TODO: delegar para env.discover_interpreters()
+    # TODO: Implement env.discover_interpreters()
     return []
 
 
-def probe() -> dict:
-    """
-    Checa capacidades do host (userns, seccomp, Landlock, cgroups).
-    
+def probe() -> Dict[str, any]:
+    """Check host system capabilities for sandboxing.
+
     Returns:
-        dict com campos:
-            - userns: bool
-            - seccomp: bool
-            - landlock: bool
-            - landlock_abi: int ou None
-            - cgroups_v2: bool
-            - arch: str
-            - kernel: str
+        Dict with capability flags:
+            - userns: bool - User namespace support
+            - seccomp: bool - Seccomp-BPF support
+            - landlock: bool - Landlock LSM support
+            - landlock_abi: Optional[int] - Landlock ABI version
+            - cgroups_v2: bool - Cgroups v2 support
+            - arch: str - System architecture
+            - kernel: str - Kernel version
+
+    Raises:
+        RuntimeError: If core extension is not available
     """
     if _core is None:
-        raise RuntimeError("pyenclave._core extension not available - did you compile with maturin?")
-    
+        raise RuntimeError(
+            "pyenclave._core extension not available. "
+            "Compile with: maturin develop"
+        )
+
     return _core.probe()
+
+
+# Internal helper functions
+
+
+def _validate_execution_mode(
+    code: Optional[str],
+    script: Optional[str],
+    module: Optional[str],
+) -> None:
+    """Validate that exactly one execution mode is specified."""
+    modes = sum([code is not None, script is not None, module is not None])
+    if modes == 0:
+        raise ConfigurationError(
+            "Must specify one of: code, script, or module"
+        )
+    if modes > 1:
+        raise ConfigurationError(
+            "Must specify only one of: code, script, or module"
+        )
+
+
+def _resolve_interpreter(interpreter: Union[str, bytes]) -> str:
+    """Resolve interpreter label or path to absolute path."""
+    if isinstance(interpreter, bytes):
+        interpreter_path = interpreter.decode("utf-8")
+    elif os.path.isabs(interpreter):
+        interpreter_path = interpreter
+    else:
+        # TODO: Use env.discover_interpreters() to resolve labels like "3.12"
+        interpreter_path = sys.executable
+
+    return interpreter_path
+
+
+def _build_argv(
+    code: Optional[str],
+    script: Optional[str],
+    module: Optional[str],
+    args: Optional[List[str]],
+) -> List[str]:
+    """Build command-line arguments for Python execution."""
+    argv_list = ["-I"]  # Isolated mode (no site packages)
+
+    if code is not None:
+        argv_list.extend(["-c", code])
+    elif script is not None:
+        argv_list.append(script)
+    elif module is not None:
+        argv_list.extend(["-m", module])
+
+    if args:
+        argv_list.extend(args)
+
+    return argv_list
+
+
+def _build_mounts_spec(mounts: Optional[Dict[str, List[str]]]) -> Dict[str, any]:
+    """Build mount specification for filesystem access."""
+    mounts_spec = {
+        "ro": [],
+        "rw": [],
+        "ephemeral_tmp": True,
+    }
+
+    if mounts:
+        if "ro" in mounts:
+            mounts_spec["ro"] = mounts["ro"]
+        if "rw" in mounts:
+            mounts_spec["rw"] = mounts["rw"]
+
+    return mounts_spec
+
+
+def _build_policy_spec(network: bool) -> Dict[str, any]:
+    """Build security policy specification."""
+    return {
+        "seccomp_profile": "default",
+        "landlock": not network,
+        "network": network,
+    }
+
+
+def _build_limits_spec(
+    time_limit_s: Optional[int],
+    memory_limit_mb: Optional[int],
+    max_procs: Optional[int],
+    fsize_mb: Optional[int],
+) -> Dict[str, int]:
+    """Build resource limits specification."""
+    limits_spec = {}
+
+    if time_limit_s is not None:
+        limits_spec["time_limit_s"] = time_limit_s
+    if memory_limit_mb is not None:
+        limits_spec["memory_limit_mb"] = memory_limit_mb
+    if max_procs is not None:
+        limits_spec["max_procs"] = max_procs
+    if fsize_mb is not None:
+        limits_spec["fsize_mb"] = fsize_mb
+
+    return limits_spec
+
+
+def _build_env_dict(
+    threads: int,
+    env_overrides: Optional[Dict[str, str]],
+) -> Dict[str, str]:
+    """Build environment variables dict."""
+    env_dict = {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONHASHSEED": "0",
+    }
+
+    if threads > 1:
+        env_dict["OMP_NUM_THREADS"] = str(threads)
+        env_dict["OPENBLAS_NUM_THREADS"] = str(threads)
+
+    if env_overrides:
+        env_dict.update(env_overrides)
+
+    return env_dict
 

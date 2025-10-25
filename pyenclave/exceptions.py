@@ -1,59 +1,43 @@
-"""
-Exceções específicas do pyenclave.
-"""
-
-
 class PyenclaveError(Exception):
     """Base exception for all pyenclave errors."""
-    pass
-
-
-class PreflightError(PyenclaveError):
-    """Raised when preflight checks fail (probe)."""
-    pass
-
-
-class PolicyError(PyenclaveError):
-    """Raised when security policy configuration is invalid."""
-    pass
-
-
-class MountError(PyenclaveError):
-    """Raised when mount configuration is invalid."""
-    pass
-
-
-class TimeoutError(PyenclaveError):
-    """Raised when execution exceeds time limit."""
-    pass
-
-
-class ResourceLimitError(PyenclaveError):
-    """Raised when resource limits are exceeded."""
-    pass
 
 
 class SecurityError(PyenclaveError):
-    """Raised when a security check fails."""
-    pass
+    """Base exception for security-related failures."""
 
 
-class IsolationError(PyenclaveError):
+class PreflightError(PyenclaveError):
+    """Raised when system capability checks fail during probe."""
+
+
+class PolicyError(SecurityError):
+    """Raised when security policy configuration is invalid or cannot be applied."""
+
+
+class MountError(PyenclaveError):
+    """Raised when filesystem mount configuration is invalid."""
+
+
+class TimeoutError(SecurityError):
+    """Raised when execution exceeds configured time limit."""
+
+
+class ResourceLimitError(SecurityError):
+    """Raised when resource limits are exceeded (memory, processes, etc)."""
+
+
+class IsolationError(SecurityError):
     """Raised when isolation setup fails (namespaces, seccomp, landlock)."""
-    pass
 
 
 class ExecutionError(PyenclaveError):
-    """Raised when code execution fails."""
-    pass
+    """Raised when code execution fails unexpectedly."""
 
 
 class ConfigurationError(PyenclaveError):
-    """Raised when configuration is invalid."""
-    pass
+    """Raised when user-provided configuration is invalid."""
 
 
 class UnsupportedPlatformError(PyenclaveError):
-    """Raised when platform doesn't support required features."""
-    pass
+    """Raised when platform doesn't support required security features."""
 

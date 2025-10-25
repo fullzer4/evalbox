@@ -1,22 +1,41 @@
-"""
-Descoberta e resolução de intérpretes (labels → /opt/pyroots/X.Y ou path de venv/conda).
-"""
-
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List
 
 
 def resolve_interpreter(label_or_path: str) -> Dict[str, Any]:
+    """Resolve interpreter label or path to standardized info.
+
+    Args:
+        label_or_path: Version label like "3.12" or absolute path
+
+    Returns:
+        Dict with keys:
+            - label: str - Version label
+            - path: str - Absolute path to Python binary
+            - version: str - Full version string
+
+    Note:
+        Currently returns empty dict. Implementation pending.
     """
-    Retorna um objeto InterpreterInfo (dict) padronizado.
-    Ex.: {"label": "3.12", "path": "/opt/pyroots/3.12/bin/python3.12"}
-    """
-    # TODO: detectar se é label semântico ou path
+    # TODO: Detect if semantic label or absolute path
+    # TODO: Scan common locations: /usr/bin, /opt/pyroots, ~/.pyenv, etc
     return {}
 
 
 def discover_interpreters() -> List[Dict[str, Any]]:
+    """Discover all available Python interpreters on system.
+
+    Scans common locations:
+        - /usr/bin/python*
+        - /opt/pyroots/* (custom roots)
+        - ~/.pyenv/versions/*
+        - Conda environments
+        - Virtual environments
+
+    Returns:
+        List of interpreter info dicts from resolve_interpreter()
+
+    Note:
+        Currently returns empty list. Implementation pending.
     """
-    Varre locais comuns para CPython/pyenv/conda/venvs e roots internos.
-    """
-    # TODO: implementar varredura
+    # TODO: Implement systematic scanning
     return []
