@@ -19,19 +19,20 @@ dependencies = [
 Homepage = "https://example.com/pyenclave"
 
 [tool.maturin]
-manifest-path = "crates/pyenclave-core/Cargo.toml"
+manifest-path = "Cargo.toml"  # Cargo.toml está na mesma pasta
 module-name   = "pyenclave._core"
 bindings      = "pyo3"
 compatibility = "manylinux2014"
+python-source = "pyenclave"  # Python source está em pyenclave/
 
 [tool.maturin.sdist]
 include = [
-    "assets/**",
-    "crates/**",
-    "pyenclave/**",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
+    "src/**",           # Rust source
+    "pyenclave/**",     # Python source
+    "tests/**",         # Tests
+    "Cargo.toml",
+    "pyproject.toml",
+    "README.md"
 ]
 
 [tool.pytest.ini_options]

@@ -1,0 +1,34 @@
+[package]
+name = "pyenclave-sandbox"
+version = "0.1.0"
+edition = "2021"
+authors = ["pyenclave contributors"]
+description = "Linux sandbox library using namespaces, seccomp-BPF, Landlock and rlimits"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/fullzer4/pyenclave"
+
+[lib]
+name = "pyenclave_sandbox"
+crate-type = ["rlib"]  # Biblioteca Rust pura
+
+[dependencies]
+# Error handling (workspace)
+anyhow.workspace = true
+thiserror.workspace = true
+
+# System/OS (workspace)
+nix.workspace = true
+rustix.workspace = true
+libc.workspace = true
+
+# Security policies (workspace)
+prctl.workspace = true
+seccompiler.workspace = true
+landlock.workspace = true
+
+# Logging (workspace)
+log.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"
+serial_test = "3.0"

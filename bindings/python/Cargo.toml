@@ -1,0 +1,21 @@
+[package]
+name = "pyenclave-python"
+version = "0.1.0"
+edition = "2021"
+authors = ["pyenclave contributors"]
+description = "Python bindings for pyenclave-sandbox"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "pyenclave"  # Nome do módulo Python: import pyenclave
+crate-type = ["cdylib"]  # Python extension module
+
+[dependencies]
+# Nossa crate sandbox (core Rust)
+pyenclave-sandbox = { path = "../../crates/pyenclave-sandbox" }
+
+# PyO3 para bindings Python
+pyo3.workspace = true
+
+[build-dependencies]
+pyo3-build-config = "0.21"
