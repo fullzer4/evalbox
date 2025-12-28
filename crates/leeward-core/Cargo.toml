@@ -1,0 +1,21 @@
+[package]
+name = "leeward-core"
+description = "Linux process isolation primitives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nix = { workspace = true }
+landlock = { workspace = true }
+seccompiler = { workspace = true }
+caps = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

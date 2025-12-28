@@ -15,3 +15,9 @@ Cargo.lock
 
 *.whl
 *.so
+
+.direnv/
+
+/target
+
+.cargo-home/

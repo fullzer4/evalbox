@@ -1,0 +1,24 @@
+[package]
+name = "leeward-cli"
+description = "CLI tools for leeward sandbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "leeward"
+path = "src/main.rs"
+
+[dependencies]
+leeward-core = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

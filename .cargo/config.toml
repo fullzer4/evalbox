@@ -1,0 +1,31 @@
+[build]
+jobs = -1
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[alias]
+b = "build"
+br = "build --release"
+t = "test"
+c = "check"
+cl = "clippy"
+
+daemon = "run --release --bin leeward-daemon --"
+
+cli = "run --release --bin leeward --"
+
+[env]
+RUST_BACKTRACE = { value = "1", force = false }
+
+[profile.dev]
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[net]
+git-fetch-with-cli = true
+
+[registries.crates-io]
+protocol = "sparse"

@@ -1,0 +1,62 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/vektia/leeward"
+authors = ["Vektia"]
+rust-version = "1.85"
+
+[workspace.dependencies]
+nix = { version = "0.30", features = ["sched", "mount", "signal", "user", "process", "fs"] }
+landlock = "0.4"
+seccompiler = "0.4"
+caps = "0.5"
+
+tokio = { version = "1", features = ["full"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rmp-serde = "1"
+
+thiserror = "2"
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+
+parking_lot = "0.12"
+
+libc = "0.2"
+once_cell = "1"
+
+clap = { version = "4", features = ["derive"] }
+
+leeward-core = { path = "crates/leeward-core" }
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = 3
+
+[profile.release.package."*"]
+opt-level = 3
+
+[profile.bench]
+inherits = "release"
+debug = true
