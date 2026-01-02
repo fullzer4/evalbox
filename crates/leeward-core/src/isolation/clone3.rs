@@ -64,10 +64,17 @@ pub fn clone_worker(
     namespace_flags: u64,
     child_fn: impl FnOnce() -> Result<()>,
 ) -> Result<pid_t> {
+    let mut flags = namespace_flags;
+
+    // Only use CLONE_INTO_CGROUP if we have a valid fd
+    if cgroup_fd >= 0 {
+        flags |= CLONE_INTO_CGROUP;
+    }
+
     let args = CloneArgs {
-        flags: namespace_flags | CLONE_INTO_CGROUP,
+        flags,
         exit_signal: libc::SIGCHLD as u64,
-        cgroup: cgroup_fd as u64,
+        cgroup: if cgroup_fd >= 0 { cgroup_fd as u64 } else { 0 },
         ..Default::default()
     };
 
