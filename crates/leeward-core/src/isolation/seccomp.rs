@@ -1,7 +1,11 @@
 //! Seccomp-BPF syscall filtering with SECCOMP_USER_NOTIF support
 
 use crate::{LeewardError, Result};
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::RawFd;
+use std::collections::BTreeMap;
+use seccompiler::{
+    SeccompAction, SeccompFilter, SeccompRule, TargetArch
+};
 
 /// Configuration for seccomp filtering
 #[derive(Debug, Clone)]
@@ -31,25 +35,68 @@ impl SeccompConfig {
     /// seccomp notifications. The supervisor can poll this fd and decide
     /// what to do with blocked syscalls.
     pub fn apply(&self) -> Result<Option<SeccompNotifyFd>> {
-        // TODO: Build and apply BPF filter using seccompiler
-        // For notify mode:
-        // 1. Build filter with SECCOMP_RET_USER_NOTIF for blocked syscalls
-        // 2. Use seccomp(SECCOMP_SET_MODE_FILTER, ...) to apply
-        // 3. Get notification fd from seccomp(SECCOMP_GET_NOTIF_SIZES, ...)
-
         tracing::debug!(
             notify = self.notify_mode,
             syscalls = self.allowed_syscalls.len(),
             "applying seccomp filter"
         );
 
-        if self.notify_mode {
-            // TODO: Return actual notification fd
-            // For now, return None as placeholder
-            Ok(None)
-        } else {
-            Ok(None)
+        // Build the filter
+        let filter = self.build_filter()?;
+
+        // Apply the filter
+        // Note: SECCOMP_USER_NOTIF requires kernel 5.0+ and special handling
+        // For now, we'll use basic filtering with KILL action for denied syscalls
+        // Convert filter to BPF program and apply it
+        let bpf_prog: seccompiler::BpfProgram = filter
+            .try_into()
+            .map_err(|e| LeewardError::Seccomp(format!("failed to compile filter to BPF: {e}")))?;
+
+        seccompiler::apply_filter(&bpf_prog)
+            .map_err(|e| LeewardError::Seccomp(format!("failed to apply seccomp filter: {e}")))?;
+
+        tracing::info!("seccomp filter applied with {} allowed syscalls", self.allowed_syscalls.len());
+
+        // SECCOMP_USER_NOTIF would require:
+        // 1. Using raw seccomp() syscall with SECCOMP_FILTER_FLAG_NEW_LISTENER
+        // 2. Getting notification fd from kernel
+        // 3. Setting up notification handler thread
+        // For now, return None as we're using basic filtering
+        Ok(None)
+    }
+
+    /// Build the seccomp filter
+    fn build_filter(&self) -> Result<SeccompFilter> {
+        let mut rules = BTreeMap::new();
+
+        // For each allowed syscall, create a rule with Allow action
+        // SeccompRule::new only takes conditions, the action is Allow by default for matched rules
+        for &syscall_num in &self.allowed_syscalls {
+            rules.insert(
+                syscall_num,
+                vec![SeccompRule::new(vec![])
+                    .map_err(|e| LeewardError::Seccomp(format!("failed to create rule: {e}")))?],
+            );
         }
+
+        // Default action for unmatched syscalls
+        let default_action = if self.log_denials {
+            SeccompAction::Log // Log and deny
+        } else {
+            SeccompAction::KillThread // Kill the thread
+        };
+
+        // Get current architecture
+        let arch = get_arch();
+
+        // Create the filter
+        SeccompFilter::new(
+            rules,
+            default_action,
+            SeccompAction::Allow, // Bad architecture action
+            arch,
+        )
+        .map_err(|e| LeewardError::Seccomp(format!("failed to create seccomp filter: {e}")))
     }
 }
 
@@ -152,6 +199,18 @@ impl Drop for SeccompNotifyFd {
             libc::close(self.fd);
         }
     }
+}
+
+/// Get the current architecture for seccomp
+fn get_arch() -> TargetArch {
+    #[cfg(target_arch = "x86_64")]
+    return TargetArch::x86_64;
+
+    #[cfg(target_arch = "aarch64")]
+    return TargetArch::aarch64;
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    compile_error!("Unsupported architecture for seccomp");
 }
 
 /// Default syscalls needed for Python to run

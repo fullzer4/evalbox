@@ -2,9 +2,8 @@
 //!
 //! Supports both traditional msgpack and zero-copy shared memory modes
 
-use leeward_core::ExecutionResult;
+use crate::ExecutionResult;
 use serde::{Deserialize, Serialize};
-use std::os::unix::io::RawFd;
 use std::time::Duration;
 
 /// Request to execute code

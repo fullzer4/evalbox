@@ -41,7 +41,7 @@ pub struct SandboxConfig {
 impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
-            python_path: PathBuf::from("/usr/bin/python3"),
+            python_path: find_python(),
             ro_binds: vec![
                 PathBuf::from("/usr"),
                 PathBuf::from("/lib"),
@@ -140,6 +140,21 @@ impl SandboxConfigBuilder {
     pub fn build(self) -> SandboxConfig {
         self.config
     }
+}
+
+/// Find Python executable in PATH
+fn find_python() -> PathBuf {
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in path_var.split(':') {
+            for name in &["python3", "python"] {
+                let candidate = PathBuf::from(dir).join(name);
+                if candidate.exists() {
+                    return candidate;
+                }
+            }
+        }
+    }
+    PathBuf::from("python3")
 }
 
 /// Get default socket path from LEEWARD_SOCKET env var or system default

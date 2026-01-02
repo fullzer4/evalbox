@@ -1,6 +1,7 @@
 //! Unix socket server
 
-use crate::{config::DaemonConfig, pool::WorkerPool, protocol::{self, Request, Response}};
+use crate::{config::DaemonConfig, pool::WorkerPool};
+use leeward_core::protocol::{self, Request, Response};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

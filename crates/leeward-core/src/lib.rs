@@ -17,6 +17,7 @@ pub mod config;
 pub mod error;
 pub mod isolation;
 pub mod pipe;
+pub mod protocol;
 pub mod result;
 pub mod shm;
 pub mod worker;

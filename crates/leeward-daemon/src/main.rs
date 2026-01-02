@@ -13,7 +13,6 @@ use tracing_subscriber::EnvFilter;
 mod config;
 mod iouring;
 mod pool;
-mod protocol;
 mod server;
 
 use config::DaemonConfig;
@@ -42,6 +41,29 @@ async fn main() -> Result<()> {
 
     // Remove existing socket
     let _ = std::fs::remove_file(&config.socket_path);
+
+    // Validate Python
+    let python_path = &config.sandbox_config.python_path;
+
+    match std::process::Command::new(python_path)
+        .arg("--version")
+        .output()
+    {
+        Ok(output) => {
+            let version = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .to_string();
+            let version = if version.is_empty() {
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            } else {
+                version
+            };
+            tracing::info!(python = ?python_path, version = %version, "Python ready");
+        }
+        Err(e) => {
+            anyhow::bail!("Python not found or not executable: {}", e);
+        }
+    }
 
     // Bind socket
     let listener = UnixListener::bind(&config.socket_path)?;

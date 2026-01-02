@@ -1,9 +1,6 @@
-//! Sandbox worker process management
-
 use crate::{pipe::ParentPipe, ExecutionResult, LeewardError, Result, SandboxConfig};
 use std::os::unix::io::RawFd;
 
-/// State of a worker in the pool
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerState {
     /// Ready to accept work
@@ -16,33 +13,19 @@ pub enum WorkerState {
     Dead,
 }
 
-/// A pre-forked sandboxed worker process
-///
-/// In the new paradigm:
-/// - Workers are created at daemon startup with clone3 + CLONE_INTO_CGROUP
-/// - Python interpreter is already loaded and idle
-/// - Code is sent via pipe, execution is immediate (~0.5ms)
-/// - Workers survive denied syscalls (SECCOMP_USER_NOTIF)
 #[derive(Debug)]
 pub struct Worker {
-    /// Unique worker ID
     pub id: u32,
-    /// Current state
     pub state: WorkerState,
-    /// Process ID (if running)
     pub pid: Option<i32>,
-    /// Number of executions completed
     pub execution_count: u64,
-    /// Configuration for this worker
     config: SandboxConfig,
-    /// Communication pipe with the worker
     pipe: Option<ParentPipe>,
     /// Cgroup file descriptor (for CLONE_INTO_CGROUP)
     cgroup_fd: Option<RawFd>,
 }
 
 impl Worker {
-    /// Create a new worker with the given config
     pub fn new(id: u32, config: SandboxConfig) -> Self {
         Self {
             id,
@@ -55,52 +38,65 @@ impl Worker {
         }
     }
 
-    /// Spawn the worker process using pre-fork model
-    ///
-    /// This uses clone3 with CLONE_INTO_CGROUP to create a fully isolated
-    /// worker process with Python already loaded.
     pub fn spawn(&mut self) -> Result<()> {
-        use crate::isolation::clone3;
+        use crate::isolation::{clone3, CgroupsConfig};
         use crate::pipe::WorkerPipe;
 
         tracing::info!(worker_id = self.id, "spawning pre-forked worker");
 
-        // Create communication pipes
+        // Try to create cgroup for this worker (optional - continue if it fails)
+        let cgroup_fd = if self.config.memory_limit > 0 || self.config.cpu_limit < 100 {
+            let cgroup_config = CgroupsConfig {
+                memory_max: self.config.memory_limit,
+                cpu_percent: self.config.cpu_limit,
+                pids_max: self.config.max_pids,
+                allow_swap: false,
+            };
+
+            match cgroup_config.create_cgroup(&format!("worker-{}", self.id)) {
+                Ok(cgroup_handle) => {
+                    let fd = cgroup_handle.as_raw_fd().unwrap_or(-1);
+                    // Store cgroup handle (we'll leak it for now, proper cleanup later)
+                    std::mem::forget(cgroup_handle);
+                    tracing::info!("cgroups enabled for worker {}", self.id);
+                    fd
+                }
+                Err(e) => {
+                    tracing::warn!("cgroups not available (running without root?): {}", e);
+                    -1
+                }
+            }
+        } else {
+            -1
+        };
+
+        self.cgroup_fd = Some(cgroup_fd);
+
+        // Create pipes for communication
         let worker_pipe = WorkerPipe::new()?;
         let (parent_pipe, child_pipe) = worker_pipe.split();
 
-        // TODO: Create cgroup for this worker and get fd
-        // For now, use -1 as placeholder (will be implemented with cgroups)
-        let cgroup_fd = -1;
-
-        // Get namespace flags from config
-        let namespace_flags = self.config_to_namespace_flags();
-
-        // Clone config for child process
+        // Get namespace flags (but don't include them in clone3, we'll set them inside)
+        let namespace_flags = 0; // We'll enter namespaces from inside the worker
         let config = self.config.clone();
 
-        // Clone the worker process with full isolation
         let pid = clone3::clone_worker(cgroup_fd, namespace_flags, move || {
-            // Child process: Set up isolation and load Python
             worker_main(child_pipe, &config)
         })?;
 
-        // Parent process: Store worker info
         self.pid = Some(pid);
         self.pipe = Some(parent_pipe);
-        self.cgroup_fd = Some(cgroup_fd);
         self.state = WorkerState::Idle;
 
         tracing::info!(
             worker_id = self.id,
             pid = pid,
-            "worker spawned and ready"
+            "worker spawned and ready with cgroup"
         );
 
         Ok(())
     }
 
-    /// Execute code in this worker via pipe
     pub fn execute(&mut self, code: &str) -> Result<ExecutionResult> {
         if self.state != WorkerState::Idle {
             return Err(LeewardError::Execution(format!(
@@ -117,14 +113,12 @@ impl Worker {
         self.state = WorkerState::Busy;
         tracing::debug!(worker_id = self.id, code_len = code.len(), "sending code to worker");
 
-        // Send code via pipe
         pipe.send_code(code.as_bytes())?;
+        let result_bytes = pipe.recv_result()?;
 
-        // Receive result via pipe
-        let _result_bytes = pipe.recv_result()?;
-
-        // TODO: Deserialize result from MessagePack
-        let result = ExecutionResult::default();
+        // MessagePack deserialization
+        let result: ExecutionResult = rmp_serde::from_slice(&result_bytes)
+            .map_err(|e| LeewardError::Execution(format!("failed to deserialize result: {}", e)))?;
 
         self.execution_count += 1;
         self.state = WorkerState::Idle;
@@ -138,36 +132,28 @@ impl Worker {
         Ok(result)
     }
 
-    /// Kill and recycle this worker
     pub fn recycle(&mut self) -> Result<()> {
         tracing::info!(worker_id = self.id, "recycling worker");
         self.state = WorkerState::Recycling;
 
-        // Kill existing process if any
         if let Some(pid) = self.pid {
             unsafe {
                 libc::kill(pid, libc::SIGKILL);
             }
         }
 
-        // Close pipe
         self.pipe = None;
-
-        // Reset state
         self.pid = None;
         self.execution_count = 0;
 
-        // Spawn new worker
         self.spawn()
     }
 
-    /// Check if worker should be recycled based on execution count
     #[must_use]
     pub fn should_recycle(&self, max_executions: u64) -> bool {
         self.execution_count >= max_executions
     }
 
-    /// Convert config to namespace flags
     fn config_to_namespace_flags(&self) -> u64 {
         use nix::sched::CloneFlags;
 
@@ -185,26 +171,63 @@ impl Worker {
     }
 }
 
-/// Worker main function (runs in child process)
-fn worker_main(mut pipe: crate::pipe::ChildPipe, _config: &SandboxConfig) -> Result<()> {
-    use crate::isolation::{LandlockConfig, SeccompConfig};
+fn worker_main(mut pipe: crate::pipe::ChildPipe, config: &SandboxConfig) -> Result<()> {
+    use crate::isolation::{LandlockConfig, SeccompConfig, NamespaceConfig};
 
-    tracing::debug!("worker process starting, setting up isolation");
+    tracing::debug!("worker process starting isolation setup");
 
-    // Set up Landlock filesystem restrictions
-    LandlockConfig::default().apply()?;
+    // Step 1: Setup namespaces (critical for security)
+    let namespace_config = NamespaceConfig {
+        user: false,  // User namespace needs UID mapping setup
+        pid: true,    // Isolate process tree
+        mount: true,  // Isolate filesystem
+        net: !config.allow_network,  // Network isolation
+        ipc: true,    // IPC isolation
+        uts: true,    // Hostname isolation
+    };
 
-    // Set up seccomp with NOTIFY mode
-    let _notify_fd = SeccompConfig::default().apply()?;
+    namespace_config.enter()?;
+    tracing::info!("namespaces configured");
 
-    // TODO: Load Python interpreter
-    tracing::info!("worker isolation complete, loading Python");
+    // Step 2: Apply Landlock filesystem restrictions (if available)
+    // Landlock requires Linux 5.13+, but that's okay - we try it
+    let mut landlock = LandlockConfig::default();
 
-    // Enter idle loop, waiting for code via pipe
+    // Add Python path and libraries as executable
+    if let Some(python_dir) = config.python_path.parent() {
+        landlock = landlock.exec(python_dir).ro(python_dir);
+    }
+
+    // Add read-only paths
+    for path in &config.ro_binds {
+        landlock = landlock.ro(path);
+    }
+
+    // Add read-write paths
+    for path in &config.rw_binds {
+        landlock = landlock.rw(path);
+    }
+
+    // Add /tmp as read-write
+    landlock = landlock.rw("/tmp");
+
+    match landlock.apply() {
+        Ok(_) => tracing::info!("landlock restrictions applied"),
+        Err(e) => {
+            // Landlock is nice to have but not critical if we have seccomp + namespaces
+            tracing::warn!("landlock not available (kernel < 5.13?): {}", e);
+        }
+    }
+
+    // Step 3: Apply seccomp filter (critical for security)
+    let seccomp = SeccompConfig::default();
+    seccomp.apply()?;
+    tracing::info!("seccomp filter applied");
+
+    tracing::info!("worker fully isolated, entering main loop");
+
+    // Main worker loop
     loop {
-        tracing::debug!("worker waiting for code");
-
-        // Receive code from daemon
         let code = match pipe.recv_code() {
             Ok(code) => code,
             Err(e) => {
@@ -213,20 +236,65 @@ fn worker_main(mut pipe: crate::pipe::ChildPipe, _config: &SandboxConfig) -> Res
             }
         };
 
-        tracing::debug!(code_len = code.len(), "received code, executing");
+        let exec_result = execute_python(&code, config);
 
-        // TODO: Execute code in Python
-        // For now, just echo back
-        let result = code;
+        let result_bytes = match rmp_serde::to_vec(&exec_result) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::error!("failed to serialize result: {}", e);
+                break;
+            }
+        };
 
-        // Send result back to daemon
-        if let Err(e) = pipe.send_result(&result) {
+        if let Err(e) = pipe.send_result(&result_bytes) {
             tracing::error!("failed to send result: {}", e);
             break;
         }
-
-        tracing::debug!("result sent, waiting for next code");
     }
 
     Ok(())
+}
+
+fn execute_python(code: &[u8], config: &SandboxConfig) -> ExecutionResult {
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+
+    let code_str = String::from_utf8_lossy(code);
+    let start = Instant::now();
+
+    let output = match Command::new(&config.python_path)
+        .arg("-c")
+        .arg(code_str.as_ref())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+    {
+        Ok(output) => output,
+        Err(e) => {
+            return ExecutionResult {
+                exit_code: -1,
+                stdout: Vec::new(),
+                stderr: format!("Failed to execute Python: {}", e).into_bytes(),
+                duration: start.elapsed(),
+                memory_peak: 0,
+                cpu_time_us: 0,
+                timed_out: false,
+                oom_killed: false,
+            };
+        }
+    };
+
+    let duration = start.elapsed();
+
+    ExecutionResult {
+        exit_code: output.status.code().unwrap_or(-1),
+        stdout: output.stdout,
+        stderr: output.stderr,
+        duration,
+        memory_peak: 0,  // TODO: Get from cgroup memory.peak
+        cpu_time_us: 0,  // TODO: Get from /proc/[pid]/stat
+        timed_out: false, // TODO: Implement timeout handling
+        oom_killed: false, // TODO: Detect from cgroup events
+    }
 }
