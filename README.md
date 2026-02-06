@@ -1,13 +1,13 @@
-# leeward
+# isolex
 
 Linux-native sandbox for running untrusted code with ~0.5ms latency.
 
 ## Usage
 
 ```python
-from leeward import Leeward
+from isolex import isolex
 
-with Leeward() as sandbox:
+with Isolex() as sandbox:
     result = sandbox.execute("print('Hello, World!')")
     print(result.stdout)  # "Hello, World!"
 ```
