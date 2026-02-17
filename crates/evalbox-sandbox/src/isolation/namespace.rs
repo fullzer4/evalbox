@@ -17,7 +17,7 @@
 //!
 //! ## Security
 //!
-//! - `deny_setgroups` must be called BEFORE writing gid_map (kernel requirement)
+//! - `deny_setgroups` must be called BEFORE writing `gid_map` (kernel requirement)
 //! - The process appears as root inside but has no real privileges
 //! - This enables pivot_root and mount operations inside the namespace
 
@@ -29,14 +29,20 @@ use std::io;
 /// Maps `inside_uid` (seen inside namespace) to `outside_uid` (real UID).
 /// The "1" at the end means we map exactly one UID.
 pub fn write_uid_map(pid: libc::pid_t, inside_uid: u32, outside_uid: u32) -> io::Result<()> {
-    fs::write(format!("/proc/{pid}/uid_map"), format!("{inside_uid} {outside_uid} 1\n"))
+    fs::write(
+        format!("/proc/{pid}/uid_map"),
+        format!("{inside_uid} {outside_uid} 1\n"),
+    )
 }
 
 /// Write GID mapping for a process in a user namespace.
 ///
 /// Maps `inside_gid` (seen inside namespace) to `outside_gid` (real GID).
 pub fn write_gid_map(pid: libc::pid_t, inside_gid: u32, outside_gid: u32) -> io::Result<()> {
-    fs::write(format!("/proc/{pid}/gid_map"), format!("{inside_gid} {outside_gid} 1\n"))
+    fs::write(
+        format!("/proc/{pid}/gid_map"),
+        format!("{inside_gid} {outside_gid} 1\n"),
+    )
 }
 
 /// Deny setgroups syscall for a process.

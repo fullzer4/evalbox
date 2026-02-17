@@ -92,9 +92,7 @@ pub use output::{Output, Status};
 pub use session::Session;
 
 // Re-export from evalbox-sandbox for convenience
-pub use evalbox_sandbox::{
-    Event, Executor, ExecutorError, Mount, Plan, SandboxId,
-};
+pub use evalbox_sandbox::{Event, Executor, ExecutorError, Mount, Plan, SandboxId};
 
 // Also re-export advanced types for power users
 pub use evalbox_sandbox::{Landlock, Syscalls, UserFile};
@@ -106,7 +104,7 @@ pub use probe::{Probe, RuntimeInfo};
 pub use probe_cache::ProbeCache;
 
 #[cfg(feature = "go")]
-pub use go::wrap::{wrap_go_code, AUTO_IMPORTS};
+pub use go::wrap::{AUTO_IMPORTS, wrap_go_code};
 
 #[cfg(feature = "go")]
 pub use go::GoProbe;

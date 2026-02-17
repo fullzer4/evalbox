@@ -18,10 +18,16 @@ pub struct ProbeCache {
 
 impl ProbeCache {
     pub fn new() -> Self {
-        Self { cache: DashMap::new() }
+        Self {
+            cache: DashMap::new(),
+        }
     }
 
-    pub fn get_or_probe<P: Probe>(&self, probe: &P, binary: &Path) -> Result<RuntimeInfo, ProbeError> {
+    pub fn get_or_probe<P: Probe>(
+        &self,
+        probe: &P,
+        binary: &Path,
+    ) -> Result<RuntimeInfo, ProbeError> {
         let key = compute_cache_key(binary)?;
 
         if let Some(info) = self.cache.get(&key) {
@@ -86,9 +92,21 @@ mod tests {
         let key1 = compute_cache_key(&file);
         let key2 = compute_cache_key(&file);
 
-        assert!(key1.is_ok(), "Should compute cache key for {}", file.display());
-        assert!(key2.is_ok(), "Should compute cache key for {}", file.display());
-        assert_eq!(key1.unwrap(), key2.unwrap(), "Same path should give same key");
+        assert!(
+            key1.is_ok(),
+            "Should compute cache key for {}",
+            file.display()
+        );
+        assert!(
+            key2.is_ok(),
+            "Should compute cache key for {}",
+            file.display()
+        );
+        assert_eq!(
+            key1.unwrap(),
+            key2.unwrap(),
+            "Same path should give same key"
+        );
     }
 
     #[test]

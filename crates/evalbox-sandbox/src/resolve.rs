@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::plan::Mount;
-use crate::sysinfo::{SystemPaths, SystemType, SYSTEM_PATHS};
+use crate::sysinfo::{SYSTEM_PATHS, SystemPaths, SystemType};
 
 #[derive(Debug, Clone)]
 pub struct ResolvedBinary {
@@ -34,7 +34,10 @@ pub fn resolve_binary(cmd: &str) -> Result<ResolvedBinary, ResolveError> {
     let sys_paths = &*SYSTEM_PATHS;
     let required_mounts = detect_mounts(&path, sys_paths);
 
-    Ok(ResolvedBinary { path, required_mounts })
+    Ok(ResolvedBinary {
+        path,
+        required_mounts,
+    })
 }
 
 fn detect_mounts(binary: &Path, sys_paths: &SystemPaths) -> Vec<Mount> {

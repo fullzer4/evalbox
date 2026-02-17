@@ -46,20 +46,14 @@ fn compile_payload(source: &PathBuf, output: &PathBuf) {
 
     for compiler in compilers {
         let status = Command::new(compiler)
-            .args([
-                "-static",
-                "-O2",
-                "-Wall",
-                "-Wextra",
-                "-o",
-            ])
+            .args(["-static", "-O2", "-Wall", "-Wextra", "-o"])
             .arg(output)
             .arg(source)
             .status();
 
         match status {
             Ok(s) if s.success() => {
-                println!("cargo:warning=Compiled payload: {}", name);
+                println!("cargo:warning=Compiled payload: {name}");
                 return;
             }
             _ => continue,
@@ -75,10 +69,10 @@ fn compile_payload(source: &PathBuf, output: &PathBuf) {
 
     match status {
         Ok(s) if s.success() => {
-            println!("cargo:warning=Compiled payload (dynamic): {}", name);
+            println!("cargo:warning=Compiled payload (dynamic): {name}");
         }
         _ => {
-            println!("cargo:warning=Failed to compile payload: {}", name);
+            println!("cargo:warning=Failed to compile payload: {name}");
         }
     }
 }

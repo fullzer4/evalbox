@@ -14,12 +14,12 @@ use crate::common::skip_if_no_namespaces;
 #[test]
 #[ignore]
 fn test_cannot_read_etc_shadow() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
-    let output = Executor::run(
-        Plan::new(["cat", "/etc/shadow"]).timeout(Duration::from_secs(5)),
-    )
-    .expect("Executor should run");
+    let output = Executor::run(Plan::new(["cat", "/etc/shadow"]).timeout(Duration::from_secs(5)))
+        .expect("Executor should run");
 
     assert!(!output.success(), "/etc/shadow should not be readable");
 
@@ -35,7 +35,9 @@ fn test_cannot_read_etc_shadow() {
 #[test]
 #[ignore]
 fn test_cannot_write_etc_passwd() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["sh", "-c", "echo 'hacked:x:0:0::/:/bin/sh' >> /etc/passwd"])
@@ -50,12 +52,12 @@ fn test_cannot_write_etc_passwd() {
 #[test]
 #[ignore]
 fn test_cannot_access_root_home() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
-    let output = Executor::run(
-        Plan::new(["ls", "/root"]).timeout(Duration::from_secs(5)),
-    )
-    .expect("Executor should run");
+    let output = Executor::run(Plan::new(["ls", "/root"]).timeout(Duration::from_secs(5)))
+        .expect("Executor should run");
 
     assert!(!output.success(), "/root should not be accessible");
 }
@@ -64,11 +66,17 @@ fn test_cannot_access_root_home() {
 #[test]
 #[ignore]
 fn test_work_dir_is_writable() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
-        Plan::new(["sh", "-c", "echo 'test content' > /work/test.txt && cat /work/test.txt"])
-            .timeout(Duration::from_secs(5)),
+        Plan::new([
+            "sh",
+            "-c",
+            "echo 'test content' > /work/test.txt && cat /work/test.txt",
+        ])
+        .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
 
@@ -80,11 +88,17 @@ fn test_work_dir_is_writable() {
 #[test]
 #[ignore]
 fn test_tmp_is_writable() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
-        Plan::new(["sh", "-c", "echo 'temp data' > /tmp/test.txt && cat /tmp/test.txt"])
-            .timeout(Duration::from_secs(5)),
+        Plan::new([
+            "sh",
+            "-c",
+            "echo 'temp data' > /tmp/test.txt && cat /tmp/test.txt",
+        ])
+        .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
 
@@ -99,7 +113,9 @@ fn test_tmp_is_writable() {
 #[test]
 #[ignore]
 fn test_path_traversal_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["cat", "/work/../../../etc/passwd"]).timeout(Duration::from_secs(5)),
@@ -139,7 +155,9 @@ fn test_path_traversal_blocked() {
 #[test]
 #[ignore]
 fn test_symlink_escape_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new([
@@ -159,12 +177,13 @@ fn test_symlink_escape_blocked() {
 #[test]
 #[ignore]
 fn test_proc_self_exe_safe() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
-    let output = Executor::run(
-        Plan::new(["readlink", "/proc/self/exe"]).timeout(Duration::from_secs(5)),
-    )
-    .expect("Executor should run");
+    let output =
+        Executor::run(Plan::new(["readlink", "/proc/self/exe"]).timeout(Duration::from_secs(5)))
+            .expect("Executor should run");
 
     // Should not reveal host paths
     if output.success() {

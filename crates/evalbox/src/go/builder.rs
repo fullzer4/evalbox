@@ -17,7 +17,7 @@ use crate::probe::Probe;
 #[cfg(any(feature = "python", feature = "go"))]
 use crate::probe_cache::ProbeCache;
 
-use super::{wrap_go_code, GoProbe};
+use super::{GoProbe, wrap_go_code};
 
 static PROBE_CACHE: LazyLock<ProbeCache> = LazyLock::new(ProbeCache::new);
 
@@ -120,7 +120,8 @@ impl GoBuilder {
 
     /// Add a read-write mount with different host and sandbox paths.
     pub fn with_rw_bind(mut self, host: impl Into<PathBuf>, sandbox: impl Into<PathBuf>) -> Self {
-        self.mounts.push(Mount::bind(host.into(), sandbox.into()).writable());
+        self.mounts
+            .push(Mount::bind(host.into(), sandbox.into()).writable());
         self
     }
 
@@ -180,7 +181,11 @@ impl GoBuilder {
 
     /// Execute the Go code and wait for completion.
     pub fn exec(self) -> Result<Output> {
-        let probe = if self.cgo_enabled { GoProbe::with_cgo() } else { GoProbe::new() };
+        let probe = if self.cgo_enabled {
+            GoProbe::with_cgo()
+        } else {
+            GoProbe::new()
+        };
 
         let go_binary = probe.detect().ok_or_else(|| Error::RuntimeNotFound {
             runtime: "go".to_string(),
@@ -191,7 +196,8 @@ impl GoBuilder {
         let transformed_code = wrap_go_code(&self.code, self.auto_wrap, self.auto_import);
 
         // Check binary cache
-        let cache_key = compute_cache_key(&transformed_code, self.go_mod.as_deref(), self.cgo_enabled);
+        let cache_key =
+            compute_cache_key(&transformed_code, self.go_mod.as_deref(), self.cgo_enabled);
         let cache_dir = get_go_cache_dir()?.join(&cache_key);
         let cached_binary = cache_dir.join("main");
 

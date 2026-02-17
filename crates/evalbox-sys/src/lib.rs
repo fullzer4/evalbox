@@ -35,7 +35,7 @@ pub mod check;
 pub mod landlock;
 pub mod seccomp;
 
-pub use check::{check, CheckError, SystemInfo};
+pub use check::{CheckError, SystemInfo, check};
 
 #[inline]
 pub fn last_errno() -> rustix::io::Errno {

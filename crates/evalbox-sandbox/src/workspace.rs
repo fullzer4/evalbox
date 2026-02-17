@@ -48,10 +48,14 @@ impl Pipe {
     }
 
     #[inline]
-    pub fn read_fd(&self) -> RawFd { self.read.as_raw_fd() }
+    pub fn read_fd(&self) -> RawFd {
+        self.read.as_raw_fd()
+    }
 
     #[inline]
-    pub fn write_fd(&self) -> RawFd { self.write.as_raw_fd() }
+    pub fn write_fd(&self) -> RawFd {
+        self.write.as_raw_fd()
+    }
 }
 
 /// Eventfd-based parent-child synchronization.
@@ -79,10 +83,14 @@ impl SyncPair {
     }
 
     #[inline]
-    pub fn child_ready_fd(&self) -> RawFd { self.child_ready.as_raw_fd() }
+    pub fn child_ready_fd(&self) -> RawFd {
+        self.child_ready.as_raw_fd()
+    }
 
     #[inline]
-    pub fn parent_done_fd(&self) -> RawFd { self.parent_done.as_raw_fd() }
+    pub fn parent_done_fd(&self) -> RawFd {
+        self.parent_done.as_raw_fd()
+    }
 }
 
 /// All pipes for sandbox I/O.
@@ -128,7 +136,9 @@ impl Workspace {
     }
 
     #[inline]
-    pub fn root(&self) -> &Path { &self.root }
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
 
     pub fn write_file(&self, path: &str, content: &[u8], executable: bool) -> io::Result<PathBuf> {
         use std::os::unix::fs::PermissionsExt;
@@ -154,7 +164,9 @@ impl Workspace {
     }
 
     pub fn setup_sandbox_dirs(&self) -> io::Result<()> {
-        for dir in ["proc", "dev", "tmp", "home", "work", "usr", "bin", "lib", "lib64", "etc"] {
+        for dir in [
+            "proc", "dev", "tmp", "home", "work", "usr", "bin", "lib", "lib64", "etc",
+        ] {
             self.create_dir(dir)?;
         }
         self.setup_minimal_etc()?;
@@ -175,16 +187,10 @@ impl Workspace {
         )?;
 
         // Minimal /etc/group - just nobody group
-        fs::write(
-            etc.join("group"),
-            "nogroup:x:65534:\n",
-        )?;
+        fs::write(etc.join("group"), "nogroup:x:65534:\n")?;
 
         // Minimal /etc/hosts - localhost only
-        fs::write(
-            etc.join("hosts"),
-            "127.0.0.1 localhost\n::1 localhost\n",
-        )?;
+        fs::write(etc.join("hosts"), "127.0.0.1 localhost\n::1 localhost\n")?;
 
         // Minimal /etc/nsswitch.conf - required for name resolution
         fs::write(

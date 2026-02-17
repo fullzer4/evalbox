@@ -103,11 +103,17 @@ mod tests {
 
     #[test]
     fn path_traversal() {
-        assert_eq!(validate_path("../etc/passwd"), Err(ValidationError::PathTraversal));
+        assert_eq!(
+            validate_path("../etc/passwd"),
+            Err(ValidationError::PathTraversal)
+        );
     }
 
     #[test]
     fn path_absolute() {
-        assert_eq!(validate_path("/etc/passwd"), Err(ValidationError::AbsolutePath));
+        assert_eq!(
+            validate_path("/etc/passwd"),
+            Err(ValidationError::AbsolutePath)
+        );
     }
 }

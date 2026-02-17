@@ -49,7 +49,10 @@ pub struct SystemInfo {
 #[derive(Debug, Clone, Error)]
 pub enum CheckError {
     #[error("kernel version {}.{}.{} is too old, need at least {}.{}.{}", .found.0, .found.1, .found.2, .required.0, .required.1, .required.2)]
-    KernelTooOld { required: (u32, u32, u32), found: (u32, u32, u32) },
+    KernelTooOld {
+        required: (u32, u32, u32),
+        found: (u32, u32, u32),
+    },
 
     #[error("landlock is not available")]
     LandlockNotAvailable,
@@ -111,7 +114,10 @@ fn check_impl() -> Result<SystemInfo, CheckError> {
 
 fn get_kernel_version() -> Result<(u32, u32, u32), CheckError> {
     let uts = uname();
-    let release = uts.release().to_str().map_err(|_| CheckError::KernelVersionReadFailed)?;
+    let release = uts
+        .release()
+        .to_str()
+        .map_err(|_| CheckError::KernelVersionReadFailed)?;
     parse_kernel_version(release)
 }
 
@@ -177,7 +183,10 @@ mod tests {
     fn test_parse_kernel_version() {
         assert_eq!(parse_kernel_version("5.15.0").unwrap(), (5, 15, 0));
         assert_eq!(parse_kernel_version("6.1.0-generic").unwrap(), (6, 1, 0));
-        assert_eq!(parse_kernel_version("5.4.0-150-generic").unwrap(), (5, 4, 0));
+        assert_eq!(
+            parse_kernel_version("5.4.0-150-generic").unwrap(),
+            (5, 4, 0)
+        );
     }
 
     #[test]
@@ -190,7 +199,7 @@ mod tests {
                 println!("Seccomp enabled: {}", info.seccomp_enabled);
             }
             Err(e) => {
-                println!("System check failed: {}", e);
+                println!("System check failed: {e}");
             }
         }
     }

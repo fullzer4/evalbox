@@ -45,18 +45,18 @@ use std::time::{Duration, Instant};
 use mio::unix::SourceFd;
 use mio::{Events as MioEvents, Interest, Poll, Token};
 use rustix::io::Errno;
-use rustix::process::{pidfd_open, pidfd_send_signal, Pid, PidfdFlags, Signal};
+use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 use thiserror::Error;
 
 use evalbox_sys::{check, last_errno};
 
 use crate::isolation::{
-    bind_mount, lockdown, make_rprivate, mount_minimal_dev, mount_proc,
-    pivot_root_and_cleanup, set_hostname, setup_id_maps, LockdownError,
+    LockdownError, bind_mount, lockdown, make_rprivate, mount_minimal_dev, mount_proc,
+    pivot_root_and_cleanup, set_hostname, setup_id_maps,
 };
-use crate::monitor::{monitor, set_nonblocking, wait_for_exit, write_stdin, Output, Status};
+use crate::monitor::{Output, Status, monitor, set_nonblocking, wait_for_exit, write_stdin};
 use crate::plan::{Mount, Plan};
-use crate::resolve::{resolve_binary, ResolvedBinary};
+use crate::resolve::{ResolvedBinary, resolve_binary};
 use crate::validate::validate_cmd;
 use crate::workspace::Workspace;
 
@@ -240,7 +240,9 @@ impl Executor {
                 .write_file(&file.path, &file.content, file.executable)
                 .map_err(ExecutorError::Workspace)?;
         }
-        workspace.setup_sandbox_dirs().map_err(ExecutorError::Workspace)?;
+        workspace
+            .setup_sandbox_dirs()
+            .map_err(ExecutorError::Workspace)?;
         create_mount_dirs(&workspace, &exec_info, &plan)?;
 
         let child_pid = unsafe { libc::fork() };
@@ -401,9 +403,7 @@ impl Executor {
         let nearest_deadline = self.sandboxes.values().map(|s| s.deadline).min();
 
         match (user_timeout, nearest_deadline) {
-            (Some(user), Some(deadline)) => {
-                Some(user.min(deadline.saturating_duration_since(now)))
-            }
+            (Some(user), Some(deadline)) => Some(user.min(deadline.saturating_duration_since(now))),
             (Some(user), None) => Some(user),
             (None, Some(deadline)) => Some(deadline.saturating_duration_since(now)),
             (None, None) => None,
@@ -449,10 +449,16 @@ impl Executor {
 
                 if is_stdout {
                     state.stdout.extend_from_slice(&data);
-                    events.push(Event::Stdout { id: sandbox_id, data });
+                    events.push(Event::Stdout {
+                        id: sandbox_id,
+                        data,
+                    });
                 } else {
                     state.stderr.extend_from_slice(&data);
-                    events.push(Event::Stderr { id: sandbox_id, data });
+                    events.push(Event::Stderr {
+                        id: sandbox_id,
+                        data,
+                    });
                 }
 
                 let total = state.stdout.len() + state.stderr.len();
@@ -528,7 +534,6 @@ impl Executor {
     }
 }
 
-
 fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
     let cmd_refs: Vec<&str> = plan.cmd.iter().map(|s| s.as_str()).collect();
     validate_cmd(&cmd_refs).map_err(ExecutorError::Validation)?;
@@ -552,7 +557,9 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
             .write_file(&file.path, &file.content, file.executable)
             .map_err(ExecutorError::Workspace)?;
     }
-    workspace.setup_sandbox_dirs().map_err(ExecutorError::Workspace)?;
+    workspace
+        .setup_sandbox_dirs()
+        .map_err(ExecutorError::Workspace)?;
     create_mount_dirs(&workspace, &exec_info, &plan)?;
 
     let child_pid = unsafe { libc::fork() };
@@ -594,7 +601,9 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
 
     if unsafe { libc::poll(&mut pfd, 1, 30000) } <= 0 {
         unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup("timeout waiting for child".into()));
+        return Err(ExecutorError::ChildSetup(
+            "timeout waiting for child".into(),
+        ));
     }
 
     let mut value: u64 = 0;
@@ -631,7 +640,11 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
 
     Ok(SpawnedSandbox {
         pidfd,
-        stdin_fd: if plan.stdin.is_some() { -1 } else { stdin_write_fd },
+        stdin_fd: if plan.stdin.is_some() {
+            -1
+        } else {
+            stdin_write_fd
+        },
         stdout_fd: stdout_read_fd,
         stderr_fd: stderr_read_fd,
         workspace: std::mem::ManuallyDrop::new(workspace),
@@ -661,7 +674,9 @@ fn blocking_parent(
 
     if unsafe { libc::poll(&mut pfd, 1, 30000) } <= 0 {
         unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup("timeout waiting for child".into()));
+        return Err(ExecutorError::ChildSetup(
+            "timeout waiting for child".into(),
+        ));
     }
 
     let mut value: u64 = 0;
@@ -695,7 +710,6 @@ fn blocking_parent(
 
     result
 }
-
 
 fn child_process(
     workspace: &Workspace,
@@ -846,7 +860,6 @@ fn exec_command(plan: &Plan, exec_info: &ExecutionInfo) -> Result<(), ExecutorEr
 
     Err(ExecutorError::Exec(last_errno()))
 }
-
 
 fn create_mount_dirs(
     workspace: &Workspace,

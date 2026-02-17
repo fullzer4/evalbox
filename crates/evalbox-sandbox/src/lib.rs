@@ -41,7 +41,7 @@ pub mod workspace;
 pub use executor::{Event, Executor, ExecutorError, SandboxId};
 pub use monitor::{Output, Status};
 pub use plan::{Landlock, Mount, Plan, Syscalls, UserFile};
-pub use resolve::{resolve_binary, ResolvedBinary, ResolveError};
+pub use resolve::{ResolveError, ResolvedBinary, resolve_binary};
 
 // Backwards compatibility
 #[allow(deprecated)]

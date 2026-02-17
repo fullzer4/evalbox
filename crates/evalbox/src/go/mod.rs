@@ -34,7 +34,7 @@ use crate::detect::{resolve_binary, resolve_from_env};
 use crate::error::ProbeError;
 use crate::probe::{Mount, Probe, RuntimeInfo};
 
-pub use wrap::{wrap_go_code, AUTO_IMPORTS};
+pub use wrap::{AUTO_IMPORTS, wrap_go_code};
 
 /// Run Go code with default settings.
 ///
@@ -90,7 +90,11 @@ impl Probe for GoProbe {
             return Some(path);
         }
 
-        let fallbacks = ["/usr/local/go/bin/go", "/usr/lib/go/bin/go", "/opt/go/bin/go"];
+        let fallbacks = [
+            "/usr/local/go/bin/go",
+            "/usr/lib/go/bin/go",
+            "/opt/go/bin/go",
+        ];
 
         for fallback in &fallbacks {
             let path = Path::new(fallback);
@@ -111,7 +115,9 @@ impl Probe for GoProbe {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ProbeError::ProbeScriptFailed(format!("go env failed: {stderr}")));
+            return Err(ProbeError::ProbeScriptFailed(format!(
+                "go env failed: {stderr}"
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -121,11 +127,20 @@ impl Probe for GoProbe {
 
         let mut runtime = RuntimeInfo::new(binary.to_path_buf());
 
-        runtime.env.insert("GOROOT".to_string(), env.goroot.to_string_lossy().into_owned());
-        runtime.env.insert("GOCACHE".to_string(), env.gocache.to_string_lossy().into_owned());
+        runtime.env.insert(
+            "GOROOT".to_string(),
+            env.goroot.to_string_lossy().into_owned(),
+        );
+        runtime.env.insert(
+            "GOCACHE".to_string(),
+            env.gocache.to_string_lossy().into_owned(),
+        );
 
         if let Some(ref gomodcache) = env.gomodcache {
-            runtime.env.insert("GOMODCACHE".to_string(), gomodcache.to_string_lossy().into_owned());
+            runtime.env.insert(
+                "GOMODCACHE".to_string(),
+                gomodcache.to_string_lossy().into_owned(),
+            );
         }
 
         runtime.env.insert(
@@ -202,7 +217,11 @@ mod tests {
 
         if let Some(p) = path {
             assert!(p.exists(), "Detected Go should exist");
-            assert!(p.to_string_lossy().contains("go"), "Path should contain 'go': {}", p.display());
+            assert!(
+                p.to_string_lossy().contains("go"),
+                "Path should contain 'go': {}",
+                p.display()
+            );
         }
     }
 
@@ -218,7 +237,12 @@ mod tests {
         let nix_path = Path::new("/nix/store/abc123-go/bin/go");
         let store_path = detect_nix_store_path(nix_path);
         assert!(store_path.is_some());
-        assert!(store_path.unwrap().to_string_lossy().starts_with("/nix/store/"));
+        assert!(
+            store_path
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("/nix/store/")
+        );
     }
 
     #[test]

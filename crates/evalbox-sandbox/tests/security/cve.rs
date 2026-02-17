@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use evalbox_sandbox::{Executor, Plan};
 
-use crate::common::{payload, skip_if_no_namespaces, SIGSYS};
+use crate::common::{SIGSYS, payload, skip_if_no_namespaces};
 
 // =============================================================================
 // CVE-2024-1086: nf_tables Use-After-Free
@@ -23,7 +23,9 @@ use crate::common::{payload, skip_if_no_namespaces, SIGSYS};
 #[test]
 #[ignore]
 fn test_cve_2024_1086_nftables_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -55,7 +57,9 @@ fn test_cve_2024_1086_nftables_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2022_0185_fsconfig_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -87,7 +91,9 @@ fn test_cve_2022_0185_fsconfig_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2017_5226_tiocsti_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -119,7 +125,9 @@ fn test_cve_2017_5226_tiocsti_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2022_0492_cgroups_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -151,7 +159,9 @@ fn test_cve_2022_0492_cgroups_blocked() {
 #[test]
 #[ignore]
 fn test_fileless_memfd_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -180,7 +190,9 @@ fn test_fileless_memfd_blocked() {
 #[test]
 #[ignore]
 fn test_ioctl_tioclinux_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -206,7 +218,9 @@ fn test_ioctl_tioclinux_blocked() {
 #[test]
 #[ignore]
 fn test_ioctl_tiocsetd_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -236,7 +250,9 @@ fn test_ioctl_tiocsetd_blocked() {
 #[test]
 #[ignore]
 fn test_userns_creation_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -268,7 +284,9 @@ fn test_userns_creation_blocked() {
 #[test]
 #[ignore]
 fn test_ptrace_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -299,7 +317,9 @@ fn test_ptrace_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2019_10063_ioctl_bypass_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])

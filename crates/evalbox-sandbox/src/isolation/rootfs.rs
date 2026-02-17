@@ -32,7 +32,6 @@ use rustix::process::pivot_root;
 
 use crate::plan::Plan;
 
-
 /// Make all mounts private recursively.
 pub fn make_rprivate() -> Result<(), Errno> {
     let ret = unsafe {
@@ -69,7 +68,12 @@ pub fn mount_proc(target: &Path) -> Result<(), Errno> {
             std::ptr::null(),
             target_c.as_ptr(),
             std::ptr::null(),
-            libc::MS_BIND | libc::MS_REMOUNT | libc::MS_RDONLY | libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
+            libc::MS_BIND
+                | libc::MS_REMOUNT
+                | libc::MS_RDONLY
+                | libc::MS_NOSUID
+                | libc::MS_NODEV
+                | libc::MS_NOEXEC,
             std::ptr::null(),
         )
     };
@@ -113,7 +117,13 @@ fn bind_mount_dev(target_dev: &Path, name: &str) -> Result<(), Errno> {
     unsafe { libc::close(fd) };
 
     let ret = unsafe {
-        libc::mount(source_c.as_ptr(), target_c.as_ptr(), std::ptr::null(), libc::MS_BIND, std::ptr::null())
+        libc::mount(
+            source_c.as_ptr(),
+            target_c.as_ptr(),
+            std::ptr::null(),
+            libc::MS_BIND,
+            std::ptr::null(),
+        )
     };
     if ret != 0 { Err(last_errno()) } else { Ok(()) }
 }
@@ -124,7 +134,13 @@ pub fn bind_mount(source: &Path, target: &Path, readonly: bool) -> Result<(), Er
     let target_c = path_to_cstring(target)?;
 
     let ret = unsafe {
-        libc::mount(source_c.as_ptr(), target_c.as_ptr(), std::ptr::null(), libc::MS_BIND | libc::MS_REC, std::ptr::null())
+        libc::mount(
+            source_c.as_ptr(),
+            target_c.as_ptr(),
+            std::ptr::null(),
+            libc::MS_BIND | libc::MS_REC,
+            std::ptr::null(),
+        )
     };
     if ret != 0 {
         return Err(last_errno());
@@ -153,7 +169,13 @@ pub fn pivot_root_and_cleanup(new_root: &Path) -> Result<(), Errno> {
     let new_root_c = path_to_cstring(new_root)?;
 
     let ret = unsafe {
-        libc::mount(new_root_c.as_ptr(), new_root_c.as_ptr(), std::ptr::null(), libc::MS_BIND | libc::MS_REC, std::ptr::null())
+        libc::mount(
+            new_root_c.as_ptr(),
+            new_root_c.as_ptr(),
+            std::ptr::null(),
+            libc::MS_BIND | libc::MS_REC,
+            std::ptr::null(),
+        )
     };
     if ret != 0 {
         return Err(last_errno());
@@ -187,7 +209,6 @@ fn path_to_cstring(path: &Path) -> Result<CString, Errno> {
     CString::new(path.as_os_str().as_bytes()).map_err(|_| Errno::INVAL)
 }
 
-
 /// Apply resource limits based on the sandbox plan.
 pub fn apply_rlimits(plan: &Plan) -> Result<(), Errno> {
     let cpu_secs = plan.timeout.as_secs().saturating_mul(2).saturating_add(60);
@@ -209,7 +230,10 @@ pub fn apply_rlimits(plan: &Plan) -> Result<(), Errno> {
 
 #[inline]
 fn set_rlimit(resource: libc::__rlimit_resource_t, limit: u64) -> Result<(), Errno> {
-    let rlim = libc::rlimit { rlim_cur: limit, rlim_max: limit };
+    let rlim = libc::rlimit {
+        rlim_cur: limit,
+        rlim_max: limit,
+    };
     // SAFETY: rlim is valid, resource is a valid constant.
     if unsafe { libc::setrlimit(resource, &rlim) } != 0 {
         Err(last_errno())
@@ -217,7 +241,6 @@ fn set_rlimit(resource: libc::__rlimit_resource_t, limit: u64) -> Result<(), Err
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -231,8 +254,14 @@ mod tests {
 
     #[test]
     fn get_current_nofile() {
-        let mut rlim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
-        assert_eq!(unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim) }, 0);
+        let mut rlim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        assert_eq!(
+            unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim) },
+            0
+        );
         assert!(rlim.rlim_cur > 0);
     }
 }

@@ -100,8 +100,13 @@ const CLONE_NEWPID: u32 = 0x20000000;
 const CLONE_NEWNET: u32 = 0x40000000;
 
 /// Combined mask of all blocked clone flags.
-const BLOCKED_CLONE_FLAGS: u32 =
-    CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET;
+const BLOCKED_CLONE_FLAGS: u32 = CLONE_NEWNS
+    | CLONE_NEWCGROUP
+    | CLONE_NEWUTS
+    | CLONE_NEWIPC
+    | CLONE_NEWUSER
+    | CLONE_NEWPID
+    | CLONE_NEWNET;
 
 // Socket constants
 const AF_NETLINK: u32 = 16; // Kernel netlink (nf_tables, etc.) - BLOCKED
@@ -131,7 +136,12 @@ pub struct SockFilter {
 impl SockFilter {
     #[inline]
     pub const fn stmt(code: u16, k: u32) -> Self {
-        Self { code, jt: 0, jf: 0, k }
+        Self {
+            code,
+            jt: 0,
+            jf: 0,
+            k,
+        }
     }
 
     #[inline]
@@ -390,11 +400,19 @@ pub fn build_whitelist_filter(syscalls: &[i64]) -> Vec<SockFilter> {
 
     // === Architecture check ===
     filter.push(SockFilter::stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARCH));
-    filter.push(SockFilter::jump(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0));
+    filter.push(SockFilter::jump(
+        BPF_JMP | BPF_JEQ | BPF_K,
+        AUDIT_ARCH_X86_64,
+        1,
+        0,
+    ));
     filter.push(SockFilter::stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS));
 
     // === Load syscall number ===
-    filter.push(SockFilter::stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_SYSCALL_NR));
+    filter.push(SockFilter::stmt(
+        BPF_LD | BPF_W | BPF_ABS,
+        OFFSET_SYSCALL_NR,
+    ));
 
     // === clone3 -> ERRNO(ENOSYS) ===
     // Return ENOSYS to allow glibc to fall back to clone() syscall.
@@ -441,7 +459,12 @@ pub fn build_whitelist_filter(syscalls: &[i64]) -> Vec<SockFilter> {
     // === Whitelist check ===
     for (i, &nr) in syscalls.iter().enumerate() {
         let allow_offset = (n - i) as u8;
-        filter.push(SockFilter::jump(BPF_JMP | BPF_JEQ | BPF_K, nr as u32, allow_offset, 0));
+        filter.push(SockFilter::jump(
+            BPF_JMP | BPF_JEQ | BPF_K,
+            nr as u32,
+            allow_offset,
+            0,
+        ));
     }
 
     // === Default deny ===
@@ -458,7 +481,12 @@ pub fn build_whitelist_filter(syscalls: &[i64]) -> Vec<SockFilter> {
     // Load clone flags (args[0])
     filter.push(SockFilter::stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARGS_0));
     // Check blocked flags
-    filter.push(SockFilter::jump(BPF_JMP | BPF_JSET | BPF_K, BLOCKED_CLONE_FLAGS, 1, 0));
+    filter.push(SockFilter::jump(
+        BPF_JMP | BPF_JSET | BPF_K,
+        BLOCKED_CLONE_FLAGS,
+        1,
+        0,
+    ));
     // No blocked flags -> ALLOW
     filter.push(SockFilter::stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
     // Blocked flags -> KILL
@@ -468,7 +496,12 @@ pub fn build_whitelist_filter(syscalls: &[i64]) -> Vec<SockFilter> {
     // Load socket domain (args[0])
     filter.push(SockFilter::stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARGS_0));
     // Block AF_NETLINK (domain 16) - access to nf_tables, etc.
-    filter.push(SockFilter::jump(BPF_JMP | BPF_JEQ | BPF_K, AF_NETLINK, 3, 0)); // -> KILL
+    filter.push(SockFilter::jump(
+        BPF_JMP | BPF_JEQ | BPF_K,
+        AF_NETLINK,
+        3,
+        0,
+    )); // -> KILL
 
     // Load socket type (args[1])
     filter.push(SockFilter::stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARGS_1));
@@ -518,13 +551,15 @@ pub unsafe fn seccomp_set_mode_filter(fprog: &SockFprog) -> Result<(), Errno> {
         return Err(last_errno());
     }
 
-    let ret =
-        unsafe { libc::syscall(libc::SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0u32, fprog as *const _) };
-    if ret != 0 {
-        Err(last_errno())
-    } else {
-        Ok(())
-    }
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_seccomp,
+            SECCOMP_SET_MODE_FILTER,
+            0u32,
+            fprog as *const _,
+        )
+    };
+    if ret != 0 { Err(last_errno()) } else { Ok(()) }
 }
 
 /// Returns true if seccomp is available.
@@ -561,7 +596,9 @@ mod tests {
         assert_eq!(clone_check.k, libc::SYS_clone as u32);
         assert!(clone_check.jt > 0);
 
-        let has_jset = filter.iter().any(|f| f.code == (BPF_JMP | BPF_JSET | BPF_K));
+        let has_jset = filter
+            .iter()
+            .any(|f| f.code == (BPF_JMP | BPF_JSET | BPF_K));
         assert!(has_jset);
     }
 

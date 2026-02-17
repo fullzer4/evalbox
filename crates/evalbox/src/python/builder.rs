@@ -108,7 +108,8 @@ impl PythonBuilder {
 
     /// Add a read-write mount with different host and sandbox paths.
     pub fn with_rw_bind(mut self, host: impl Into<PathBuf>, sandbox: impl Into<PathBuf>) -> Self {
-        self.mounts.push(Mount::bind(host.into(), sandbox.into()).writable());
+        self.mounts
+            .push(Mount::bind(host.into(), sandbox.into()).writable());
         self
     }
 
@@ -234,8 +235,7 @@ mod tests {
 
     #[test]
     fn test_builder_venv() {
-        let builder = PythonBuilder::new("import numpy")
-            .venv("/path/to/.venv");
+        let builder = PythonBuilder::new("import numpy").venv("/path/to/.venv");
 
         assert_eq!(builder.venv, Some(PathBuf::from("/path/to/.venv")));
     }

@@ -25,10 +25,7 @@ pub enum Error {
     },
 
     #[error("runtime not found: {runtime}\n  searched:\n{searched}")]
-    RuntimeNotFound {
-        runtime: String,
-        searched: String,
-    },
+    RuntimeNotFound { runtime: String, searched: String },
 
     #[error("probe error: {0}")]
     Probe(#[from] ProbeError),

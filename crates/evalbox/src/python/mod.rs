@@ -69,7 +69,9 @@ impl PythonProbe {
     }
 
     pub fn with_version(version: impl Into<String>) -> Self {
-        Self { version: Some(version.into()) }
+        Self {
+            version: Some(version.into()),
+        }
     }
 }
 
@@ -105,7 +107,11 @@ impl Probe for PythonProbe {
             }
         }
 
-        let fallbacks = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/python/bin/python3"];
+        let fallbacks = [
+            "/usr/bin/python3",
+            "/usr/local/bin/python3",
+            "/opt/python/bin/python3",
+        ];
 
         for fallback in &fallbacks {
             let path = Path::new(fallback);
@@ -164,12 +170,17 @@ print(json.dumps(result))
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let info: PythonInfo = serde_json::from_str(&stdout).map_err(|e| {
-            ProbeError::ParseError(format!("failed to parse Python probe output: {e}\n{stdout}"))
+            ProbeError::ParseError(format!(
+                "failed to parse Python probe output: {e}\n{stdout}"
+            ))
         })?;
 
         let mut runtime = RuntimeInfo::new(binary.to_path_buf());
 
-        runtime.env.insert("PYTHONHOME".to_string(), info.prefix.to_string_lossy().into_owned());
+        runtime.env.insert(
+            "PYTHONHOME".to_string(),
+            info.prefix.to_string_lossy().into_owned(),
+        );
 
         let mut mount_paths = std::collections::HashSet::new();
 
@@ -274,7 +285,11 @@ mod tests {
 
         if let Some(p) = path {
             assert!(p.exists(), "Detected Python should exist");
-            assert!(p.to_string_lossy().contains("python"), "Path should contain 'python': {}", p.display());
+            assert!(
+                p.to_string_lossy().contains("python"),
+                "Path should contain 'python': {}",
+                p.display()
+            );
         }
     }
 

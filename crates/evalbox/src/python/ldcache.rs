@@ -161,7 +161,10 @@ mod tests {
     #[test]
     fn test_load_nonexistent() {
         let result = LdCache::load_from(Path::new("/nonexistent/ld.so.cache"));
-        assert!(result.is_ok(), "Should return empty cache for nonexistent file");
+        assert!(
+            result.is_ok(),
+            "Should return empty cache for nonexistent file"
+        );
         assert!(result.unwrap().entries.is_empty());
     }
 
@@ -188,7 +191,10 @@ mod tests {
     fn test_lookup_nonexistent() {
         let cache = LdCache::load().unwrap();
         let result = cache.lookup("nonexistent_library_12345.so");
-        assert!(result.is_none(), "Should return None for nonexistent library");
+        assert!(
+            result.is_none(),
+            "Should return None for nonexistent library"
+        );
     }
 
     #[test]

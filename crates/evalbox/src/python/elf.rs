@@ -81,9 +81,13 @@ fn parse_rpath_runpath(path: &Path) -> Result<(Vec<String>, Vec<String>), ProbeE
         });
     };
 
-    let origin = path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    let origin = path
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
 
-    let expand_path = |s: &str| -> String { s.replace("$ORIGIN", &origin).replace("${ORIGIN}", &origin) };
+    let expand_path =
+        |s: &str| -> String { s.replace("$ORIGIN", &origin).replace("${ORIGIN}", &origin) };
 
     let rpath: Vec<String> = elf
         .runpaths
@@ -181,7 +185,8 @@ mod tests {
         let libs = result.unwrap();
         if !libs.is_empty() {
             assert!(
-                libs.iter().any(|l| l.contains("libc") || l.contains("musl")),
+                libs.iter()
+                    .any(|l| l.contains("libc") || l.contains("musl")),
                 "Dynamic binary should link libc/musl: {libs:?}"
             );
         }
@@ -214,11 +219,19 @@ mod tests {
         };
 
         let result = resolve_shared_libs(&binary);
-        assert!(result.is_ok(), "Should resolve {} dependencies", binary.display());
+        assert!(
+            result.is_ok(),
+            "Should resolve {} dependencies",
+            binary.display()
+        );
 
         let libs = result.unwrap();
         for lib in &libs {
-            assert!(lib.exists(), "Resolved library should exist: {}", lib.display());
+            assert!(
+                lib.exists(),
+                "Resolved library should exist: {}",
+                lib.display()
+            );
         }
     }
 
@@ -246,7 +259,9 @@ mod tests {
         if let Ok(Some(interp)) = result {
             let interp_str = interp.to_string_lossy();
             assert!(
-                interp_str.contains("ld-linux") || interp_str.contains("ld.so") || interp_str.contains("ld-musl"),
+                interp_str.contains("ld-linux")
+                    || interp_str.contains("ld.so")
+                    || interp_str.contains("ld-musl"),
                 "Interpreter should be a dynamic linker: {interp_str}"
             );
         }

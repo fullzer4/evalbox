@@ -7,14 +7,16 @@ use std::time::Duration;
 
 use evalbox_sandbox::{Executor, Plan};
 
-use crate::common::{payload, skip_if_no_namespaces, SIGSYS};
+use crate::common::{SIGSYS, payload, skip_if_no_namespaces};
 
 /// Test that a simple payload can execute successfully.
 /// This is a control test to verify the sandbox is working.
 #[test]
 #[ignore]
 fn test_payload_can_execute() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -25,7 +27,9 @@ fn test_payload_can_execute() {
 
     assert!(output.success(), "Control payload should succeed");
     assert!(
-        output.stdout_str().contains("payload executed successfully"),
+        output
+            .stdout_str()
+            .contains("payload executed successfully"),
         "Should see success message"
     );
 }
@@ -35,7 +39,9 @@ fn test_payload_can_execute() {
 #[test]
 #[ignore]
 fn test_ptrace_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -58,7 +64,9 @@ fn test_ptrace_blocked() {
 #[test]
 #[ignore]
 fn test_mount_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -81,7 +89,9 @@ fn test_mount_blocked() {
 #[test]
 #[ignore]
 fn test_reboot_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -104,7 +114,9 @@ fn test_reboot_blocked() {
 #[test]
 #[ignore]
 fn test_clone_newuser_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -127,7 +139,9 @@ fn test_clone_newuser_blocked() {
 #[test]
 #[ignore]
 fn test_socket_netlink_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -150,7 +164,9 @@ fn test_socket_netlink_blocked() {
 #[test]
 #[ignore]
 fn test_socket_raw_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -174,7 +190,9 @@ fn test_socket_raw_blocked() {
 #[test]
 #[ignore]
 fn test_keyctl_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -198,7 +216,9 @@ fn test_keyctl_blocked() {
 #[test]
 #[ignore]
 fn test_bpf_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])

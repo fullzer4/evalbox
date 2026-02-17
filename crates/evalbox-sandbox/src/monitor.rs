@@ -24,7 +24,7 @@ use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::time::{Duration, Instant};
 
-use rustix::process::{pidfd_send_signal, Signal};
+use rustix::process::{Signal, pidfd_send_signal};
 
 use crate::plan::Plan;
 use crate::workspace::Workspace;
@@ -98,9 +98,21 @@ pub fn monitor(pidfd: OwnedFd, workspace: &Workspace, plan: &Plan) -> io::Result
         // Cap at 100ms to allow periodic timeout checks. Cast is safe since min(100) fits in i32.
         let poll_timeout = timeout_remaining.as_millis().min(100) as i32;
         let mut fds = [
-            libc::pollfd { fd: stdout_fd, events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: stderr_fd, events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: pidfd_raw, events: libc::POLLIN, revents: 0 },
+            libc::pollfd {
+                fd: stdout_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: stderr_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: pidfd_raw,
+                events: libc::POLLIN,
+                revents: 0,
+            },
         ];
 
         let ret = unsafe { libc::poll(fds.as_mut_ptr(), 3, poll_timeout) };
@@ -180,7 +192,11 @@ pub fn write_stdin(workspace: &Workspace, data: &[u8]) -> io::Result<()> {
     let mut written = 0;
     while written < data.len() {
         let ret = unsafe {
-            libc::write(fd, data[written..].as_ptr().cast::<libc::c_void>(), data.len() - written)
+            libc::write(
+                fd,
+                data[written..].as_ptr().cast::<libc::c_void>(),
+                data.len() - written,
+            )
         };
         if ret < 0 {
             return Err(io::Error::last_os_error());
@@ -197,13 +213,21 @@ pub(crate) fn set_nonblocking(fd: RawFd) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
     let ret = unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
-    if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 #[inline]
 fn read_nonblocking(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
     let ret = unsafe { libc::read(fd, buf.as_mut_ptr().cast::<libc::c_void>(), buf.len()) };
-    if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(ret as usize) }
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(ret as usize)
+    }
 }
 
 fn drain_remaining(fd: RawFd, output: &mut Vec<u8>, buf: &mut [u8], max_output: u64) {
@@ -228,7 +252,12 @@ fn drain_remaining(fd: RawFd, output: &mut Vec<u8>, buf: &mut [u8], max_output: 
 pub(crate) fn wait_for_exit(pidfd: RawFd) -> io::Result<(Option<i32>, Option<i32>)> {
     let mut siginfo: libc::siginfo_t = unsafe { std::mem::zeroed() };
     let ret = unsafe {
-        libc::waitid(libc::P_PIDFD, pidfd as libc::id_t, &mut siginfo, libc::WEXITED)
+        libc::waitid(
+            libc::P_PIDFD,
+            pidfd as libc::id_t,
+            &mut siginfo,
+            libc::WEXITED,
+        )
     };
     if ret < 0 {
         return Err(io::Error::last_os_error());

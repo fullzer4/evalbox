@@ -101,7 +101,8 @@ impl ShellBuilder {
 
     /// Add a read-write mount with different host and sandbox paths.
     pub fn with_rw_bind(mut self, host: impl Into<PathBuf>, sandbox: impl Into<PathBuf>) -> Self {
-        self.mounts.push(Mount::bind(host.into(), sandbox.into()).writable());
+        self.mounts
+            .push(Mount::bind(host.into(), sandbox.into()).writable());
         self
     }
 
@@ -172,9 +173,7 @@ mod tests {
 
     #[test]
     fn test_builder_mounts() {
-        let builder = ShellBuilder::new("echo")
-            .with("/data")
-            .with_rw("/output");
+        let builder = ShellBuilder::new("echo").with("/data").with_rw("/output");
 
         assert_eq!(builder.mounts.len(), 2);
     }

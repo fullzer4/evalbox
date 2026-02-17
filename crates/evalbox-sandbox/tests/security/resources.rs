@@ -13,14 +13,14 @@ use crate::common::{payload, skip_if_no_namespaces};
 #[test]
 #[ignore]
 fn test_timeout_enforced() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let start = std::time::Instant::now();
 
-    let output = Executor::run(
-        Plan::new(["sleep", "60"]).timeout(Duration::from_millis(500)),
-    )
-    .expect("Executor should run");
+    let output = Executor::run(Plan::new(["sleep", "60"]).timeout(Duration::from_millis(500)))
+        .expect("Executor should run");
 
     let elapsed = start.elapsed();
 
@@ -37,11 +37,12 @@ fn test_timeout_enforced() {
 #[test]
 #[ignore]
 fn test_infinite_loop_timeout() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
-        Plan::new(["sh", "-c", "while true; do :; done"])
-            .timeout(Duration::from_millis(500)),
+        Plan::new(["sh", "-c", "while true; do :; done"]).timeout(Duration::from_millis(500)),
     )
     .expect("Executor should run");
 
@@ -53,7 +54,9 @@ fn test_infinite_loop_timeout() {
 #[test]
 #[ignore]
 fn test_max_pids_enforced() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["/work/payload"])
@@ -78,7 +81,9 @@ fn test_max_pids_enforced() {
 #[test]
 #[ignore]
 fn test_output_limit_enforced() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["sh", "-c", "yes | head -c 100000"]) // 100KB of 'y'
@@ -110,7 +115,9 @@ fn test_output_limit_enforced() {
 #[test]
 #[ignore]
 fn test_memory_limit_set() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     // Check that the memory rlimit is set correctly
     let output = Executor::run(
@@ -143,14 +150,14 @@ fn test_memory_limit_set() {
 #[test]
 #[ignore]
 fn test_fd_limit_set() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     // Check the fd limit using ulimit
-    let output = Executor::run(
-        Plan::new(["sh", "-c", "ulimit -n"])
-            .timeout(Duration::from_secs(5)),
-    )
-    .expect("Executor should run");
+    let output =
+        Executor::run(Plan::new(["sh", "-c", "ulimit -n"]).timeout(Duration::from_secs(5)))
+            .expect("Executor should run");
 
     // The default fd limit should be reasonable (not unlimited)
     if output.success() {
@@ -171,7 +178,9 @@ fn test_fd_limit_set() {
 #[test]
 #[ignore]
 fn test_cpu_intensive_timeout() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let start = std::time::Instant::now();
 

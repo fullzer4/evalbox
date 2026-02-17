@@ -104,7 +104,11 @@ pub fn landlock_abi_version() -> Result<u32, Errno> {
             LANDLOCK_CREATE_RULESET_VERSION,
         )
     };
-    if ret < 0 { Err(last_errno()) } else { Ok(ret as u32) }
+    if ret < 0 {
+        Err(last_errno())
+    } else {
+        Ok(ret as u32)
+    }
 }
 
 /// Creates a new Landlock ruleset.
@@ -159,9 +163,7 @@ pub fn landlock_add_rule_path(
 /// Returns `Errno` if the restriction fails.
 pub fn landlock_restrict_self(ruleset_fd: &OwnedFd) -> Result<(), Errno> {
     // SAFETY: ruleset_fd is a valid file descriptor.
-    let ret = unsafe {
-        libc::syscall(SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd.as_raw_fd(), 0u32)
-    };
+    let ret = unsafe { libc::syscall(SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd.as_raw_fd(), 0u32) };
     if ret < 0 { Err(last_errno()) } else { Ok(()) }
 }
 
@@ -181,9 +183,15 @@ pub fn fs_access_for_abi(abi: u32) -> u64 {
         | LANDLOCK_ACCESS_FS_MAKE_BLOCK
         | LANDLOCK_ACCESS_FS_MAKE_SYM;
 
-    if abi >= 2 { access |= LANDLOCK_ACCESS_FS_REFER; }
-    if abi >= 3 { access |= LANDLOCK_ACCESS_FS_TRUNCATE; }
-    if abi >= 4 { access |= LANDLOCK_ACCESS_FS_IOCTL_DEV; }
+    if abi >= 2 {
+        access |= LANDLOCK_ACCESS_FS_REFER;
+    }
+    if abi >= 3 {
+        access |= LANDLOCK_ACCESS_FS_TRUNCATE;
+    }
+    if abi >= 4 {
+        access |= LANDLOCK_ACCESS_FS_IOCTL_DEV;
+    }
 
     access
 }

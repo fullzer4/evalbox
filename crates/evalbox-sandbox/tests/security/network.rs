@@ -14,7 +14,9 @@ use crate::common::skip_if_no_namespaces;
 #[test]
 #[ignore]
 fn test_network_blocked_by_default() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["sh", "-c", "curl -s --connect-timeout 2 http://example.com || wget -q -O- --timeout=2 http://example.com"])
@@ -29,7 +31,9 @@ fn test_network_blocked_by_default() {
 #[test]
 #[ignore]
 fn test_localhost_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
         Plan::new(["sh", "-c", "echo test | nc -w1 127.0.0.1 80 2>/dev/null"])
@@ -46,12 +50,18 @@ fn test_localhost_blocked() {
 #[test]
 #[ignore]
 fn test_external_dns_blocked() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     // Use a domain that definitely isn't in /etc/hosts
     let output = Executor::run(
-        Plan::new(["sh", "-c", "getent hosts randomdomain12345.example.com 2>&1"])
-            .timeout(Duration::from_secs(5)),
+        Plan::new([
+            "sh",
+            "-c",
+            "getent hosts randomdomain12345.example.com 2>&1",
+        ])
+        .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
 
@@ -75,7 +85,9 @@ fn test_external_dns_blocked() {
 #[test]
 #[ignore]
 fn test_network_flag_enabled() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     // Just verify that enabling network doesn't break sandbox execution
     let output = Executor::run(
@@ -85,7 +97,10 @@ fn test_network_flag_enabled() {
     )
     .expect("Executor should run");
 
-    assert!(output.success(), "Basic command should work with network enabled");
+    assert!(
+        output.success(),
+        "Basic command should work with network enabled"
+    );
     assert!(
         output.stdout_str().contains("network flag test"),
         "Should see output"
@@ -96,11 +111,17 @@ fn test_network_flag_enabled() {
 #[test]
 #[ignore]
 fn test_loopback_isolated() {
-    if skip_if_no_namespaces() { return; }
+    if skip_if_no_namespaces() {
+        return;
+    }
 
     let output = Executor::run(
-        Plan::new(["sh", "-c", "ip addr show lo 2>/dev/null || ifconfig lo 2>/dev/null"])
-            .timeout(Duration::from_secs(5)),
+        Plan::new([
+            "sh",
+            "-c",
+            "ip addr show lo 2>/dev/null || ifconfig lo 2>/dev/null",
+        ])
+        .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
 

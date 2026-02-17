@@ -239,7 +239,11 @@ pub struct UserFile {
 
 impl UserFile {
     pub fn new(path: impl Into<String>, content: impl Into<Vec<u8>>) -> Self {
-        Self { path: path.into(), content: content.into(), executable: false }
+        Self {
+            path: path.into(),
+            content: content.into(),
+            executable: false,
+        }
     }
 
     pub fn executable(mut self) -> Self {
@@ -269,7 +273,7 @@ impl UserFile {
 #[derive(Debug, Clone)]
 pub struct Plan {
     pub cmd: Vec<String>,
-    /// Pre-resolved binary path. If set, sandbox uses this instead of resolving cmd[0].
+    /// Pre-resolved binary path. If set, sandbox uses this instead of resolving `cmd\[0\]`.
     /// This allows evalbox to do binary resolution before calling sandbox.
     pub binary_path: Option<PathBuf>,
     pub env: HashMap<String, String>,
@@ -317,7 +321,10 @@ impl Default for Plan {
 
 impl Plan {
     pub fn new(cmd: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        Self { cmd: cmd.into_iter().map(Into::into).collect(), ..Default::default() }
+        Self {
+            cmd: cmd.into_iter().map(Into::into).collect(),
+            ..Default::default()
+        }
     }
 
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
@@ -362,7 +369,8 @@ impl Plan {
 
     /// Add an executable binary to the workspace.
     pub fn executable(mut self, path: impl Into<String>, content: impl Into<Vec<u8>>) -> Self {
-        self.user_files.push(UserFile::new(path, content).executable());
+        self.user_files
+            .push(UserFile::new(path, content).executable());
         self
     }
 
@@ -479,10 +487,7 @@ mod tests {
 
     #[test]
     fn plan_syscalls_config() {
-        let syscalls = Syscalls::default()
-            .allow(1)
-            .allow(2)
-            .deny(3);
+        let syscalls = Syscalls::default().allow(1).allow(2).deny(3);
 
         assert!(syscalls.allowed.contains(&1));
         assert!(syscalls.allowed.contains(&2));
@@ -491,9 +496,7 @@ mod tests {
 
     #[test]
     fn plan_landlock_config() {
-        let landlock = Landlock::new()
-            .allow_read("/etc")
-            .allow_read_write("/tmp");
+        let landlock = Landlock::new().allow_read("/etc").allow_read_write("/tmp");
 
         assert_eq!(landlock.read_paths.len(), 1);
         assert_eq!(landlock.write_paths.len(), 1);

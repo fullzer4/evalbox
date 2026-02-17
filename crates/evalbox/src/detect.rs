@@ -117,7 +117,10 @@ mod tests {
     #[test]
     fn test_resolve_binary_absolute_nonexistent() {
         let result = resolve_binary("/nonexistent/binary", &[]);
-        assert!(result.is_none(), "Nonexistent absolute path should return None");
+        assert!(
+            result.is_none(),
+            "Nonexistent absolute path should return None"
+        );
     }
 
     #[test]
@@ -140,7 +143,11 @@ mod tests {
         };
 
         let result = resolve_binary("nonexistent", &[binary.to_str().unwrap()]);
-        assert!(result.is_some(), "Should find fallback {}", binary.display());
+        assert!(
+            result.is_some(),
+            "Should find fallback {}",
+            binary.display()
+        );
         assert_eq!(result.unwrap(), binary);
     }
 

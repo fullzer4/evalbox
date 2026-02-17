@@ -116,10 +116,6 @@ mod go_integration {
 
         // GOROOT mount should exist
         let goroot = &info.env["GOROOT"];
-        assert!(
-            Path::new(goroot).exists(),
-            "GOROOT should exist: {goroot}"
-        );
+        assert!(Path::new(goroot).exists(), "GOROOT should exist: {goroot}");
     }
-
 }
