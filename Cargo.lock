@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "evalbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dashmap",
  "evalbox-sandbox",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "evalbox-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cc",
  "evalbox-sys",
@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "evalbox-sys"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "rustix",
