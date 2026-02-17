@@ -109,7 +109,7 @@ fn test_reboot_blocked() {
     );
 }
 
-/// Test that clone(CLONE_NEWUSER) is blocked.
+/// Test that `clone(CLONE_NEWUSER)` is blocked.
 /// Creating new namespaces inside sandbox could allow escape.
 #[test]
 #[ignore]
@@ -134,8 +134,8 @@ fn test_clone_newuser_blocked() {
     );
 }
 
-/// Test that AF_NETLINK sockets are blocked.
-/// Netlink gives access to kernel interfaces like nf_tables (CVE-2024-1086).
+/// Test that `AF_NETLINK` sockets are blocked.
+/// Netlink gives access to kernel interfaces like `nf_tables` (CVE-2024-1086).
 #[test]
 #[ignore]
 fn test_socket_netlink_blocked() {
@@ -159,7 +159,7 @@ fn test_socket_netlink_blocked() {
     );
 }
 
-/// Test that SOCK_RAW sockets are blocked.
+/// Test that `SOCK_RAW` sockets are blocked.
 /// Raw sockets allow crafting arbitrary packets.
 #[test]
 #[ignore]

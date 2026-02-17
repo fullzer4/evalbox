@@ -15,11 +15,11 @@ use crate::common::{SIGSYS, payload, skip_if_no_namespaces};
 
 /// Test that CVE-2024-1086 attack vector is blocked.
 ///
-/// CVE-2024-1086 is a use-after-free in Linux kernel's nf_tables.
-/// The exploit requires AF_NETLINK socket access to nf_tables subsystem.
+/// CVE-2024-1086 is a use-after-free in Linux kernel's `nf_tables`.
+/// The exploit requires `AF_NETLINK` socket access to `nf_tables` subsystem.
 /// Actively exploited in ransomware campaigns (CISA Oct 2025).
 ///
-/// Reference: https://www.sysdig.com/blog/detecting-cve-2024-1086
+/// Reference: <https://www.sysdig.com/blog/detecting-cve-2024-1086>
 #[test]
 #[ignore]
 fn test_cve_2024_1086_nftables_blocked() {
@@ -49,11 +49,11 @@ fn test_cve_2024_1086_nftables_blocked() {
 
 /// Test that CVE-2022-0185 attack vector is blocked.
 ///
-/// CVE-2022-0185 is a heap overflow in fsconfig() syscall.
-/// Requires CAP_SYS_ADMIN in user namespace.
+/// CVE-2022-0185 is a heap overflow in `fsconfig()` syscall.
+/// Requires `CAP_SYS_ADMIN` in user namespace.
 /// Won $31,337 bounty for escaping Google's kCTF containers.
 ///
-/// Reference: https://www.willsroot.io/2022/01/cve-2022-0185.html
+/// Reference: <https://www.willsroot.io/2022/01/cve-2022-0185.html>
 #[test]
 #[ignore]
 fn test_cve_2022_0185_fsconfig_blocked() {
@@ -85,9 +85,9 @@ fn test_cve_2022_0185_fsconfig_blocked() {
 ///
 /// TIOCSTI ioctl injects characters into terminal input buffer.
 /// Allows sandbox escape by injecting commands into parent shell.
-/// Affected bubblewrap, SELinux sandbox, util-linux runuser.
+/// Affected bubblewrap, `SELinux` sandbox, util-linux runuser.
 ///
-/// Reference: https://github.com/containers/bubblewrap/issues/142
+/// Reference: <https://github.com/containers/bubblewrap/issues/142>
 #[test]
 #[ignore]
 fn test_cve_2017_5226_tiocsti_blocked() {
@@ -117,11 +117,11 @@ fn test_cve_2017_5226_tiocsti_blocked() {
 
 /// Test that CVE-2022-0492 cgroups escape is blocked.
 ///
-/// CVE-2022-0492 allows container escape via cgroup release_agent.
+/// CVE-2022-0492 allows container escape via cgroup `release_agent`.
 /// Requires user namespace + mount capability.
 /// CVSS 7.0 (High).
 ///
-/// Reference: https://unit42.paloaltonetworks.com/cve-2022-0492-cgroups/
+/// Reference: <https://unit42.paloaltonetworks.com/cve-2022-0492-cgroups>/
 #[test]
 #[ignore]
 fn test_cve_2022_0492_cgroups_blocked() {
@@ -151,11 +151,11 @@ fn test_cve_2022_0492_cgroups_blocked() {
 
 /// Test that fileless execution is blocked.
 ///
-/// memfd_create + execveat allows executing code without writing to filesystem.
+/// `memfd_create` + execveat allows executing code without writing to filesystem.
 /// Used by malware to evade detection.
 /// Bypasses filesystem-based security controls.
 ///
-/// Reference: https://www.aquasec.com/blog/intro-to-fileless-malware-in-containers/
+/// Reference: <https://www.aquasec.com/blog/intro-to-fileless-malware-in-containers>/
 #[test]
 #[ignore]
 fn test_fileless_memfd_blocked() {
@@ -212,7 +212,7 @@ fn test_ioctl_tioclinux_blocked() {
 /// Test that TIOCSETD ioctl is blocked.
 ///
 /// TIOCSETD loads TTY line disciplines which have had many vulnerabilities:
-/// - CVE-2017-2636: n_hdlc double-free
+/// - CVE-2017-2636: `n_hdlc` double-free
 /// - CVE-2019-11815: slip line discipline race
 /// - Multiple other line discipline bugs
 #[test]
@@ -246,7 +246,7 @@ fn test_ioctl_tiocsetd_blocked() {
 /// User namespaces are the prerequisite for most kernel exploits:
 /// - CVE-2024-1086, CVE-2022-0185, CVE-2022-0492, CVE-2021-22555
 ///
-/// Blocking clone(CLONE_NEWUSER) prevents a large class of kernel exploits.
+/// Blocking `clone(CLONE_NEWUSER)` prevents a large class of kernel exploits.
 #[test]
 #[ignore]
 fn test_userns_creation_blocked() {
@@ -280,7 +280,7 @@ fn test_userns_creation_blocked() {
 /// - Inject code
 /// - Bypass security controls in traced process
 ///
-/// CVE-2019-13272: ptrace PTRACE_TRACEME privilege escalation
+/// CVE-2019-13272: ptrace `PTRACE_TRACEME` privilege escalation
 #[test]
 #[ignore]
 fn test_ptrace_blocked() {
@@ -313,7 +313,7 @@ fn test_ptrace_blocked() {
 /// By putting garbage in upper 32 bits, attackers bypass filters while kernel
 /// processes only the lower 32 bits. Affected Flatpak < 1.0.8.
 ///
-/// Reference: https://github.com/flatpak/flatpak/security/advisories/GHSA-6qcp-mh39-cp53
+/// Reference: <https://github.com/flatpak/flatpak/security/advisories/GHSA-6qcp-mh39-cp53>
 #[test]
 #[ignore]
 fn test_cve_2019_10063_ioctl_bypass_blocked() {

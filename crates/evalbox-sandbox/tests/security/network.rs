@@ -74,9 +74,7 @@ fn test_external_dns_blocked() {
     let has_ip = stdout.contains('.') && stdout.chars().any(|c| c.is_ascii_digit());
     assert!(
         !has_ip || !output.success(),
-        "External DNS should not resolve. stdout: {}, stderr: {}",
-        stdout,
-        stderr
+        "External DNS should not resolve. stdout: {stdout}, stderr: {stderr}"
     );
 }
 

@@ -26,8 +26,7 @@ fn test_cannot_read_etc_shadow() {
     let stderr = output.stderr_str();
     assert!(
         stderr.contains("No such file") || stderr.contains("Permission denied"),
-        "Expected 'No such file' or 'Permission denied', got: {}",
-        stderr
+        "Expected 'No such file' or 'Permission denied', got: {stderr}"
     );
 }
 
@@ -136,17 +135,12 @@ fn test_path_traversal_blocked() {
         assert!(
             !has_nixbld && !has_real_users && line_count <= 5,
             "Path traversal should not leak real /etc/passwd.\n\
-             Expected minimal sandbox passwd, got {} lines:\n{}",
-            line_count,
-            content
+             Expected minimal sandbox passwd, got {line_count} lines:\n{content}"
         );
 
         // If there's root: it should be the sandbox's nobody-only passwd
         if has_root {
-            panic!(
-                "Path traversal leaked real /etc/passwd with root entry:\n{}",
-                content
-            );
+            panic!("Path traversal leaked real /etc/passwd with root entry:\n{content}");
         }
     }
 }
@@ -190,8 +184,7 @@ fn test_proc_self_exe_safe() {
         let exe_path = output.stdout_str();
         assert!(
             !exe_path.contains("/home/") && !exe_path.contains("/usr/"),
-            "/proc/self/exe should not reveal host paths: {}",
-            exe_path
+            "/proc/self/exe should not reveal host paths: {exe_path}"
         );
     }
 }

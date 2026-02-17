@@ -28,8 +28,7 @@ fn test_timeout_enforced() {
     assert_eq!(output.status, Status::Timeout, "Status should be Timeout");
     assert!(
         elapsed < Duration::from_secs(2),
-        "Should timeout quickly, took {:?}",
-        elapsed
+        "Should timeout quickly, took {elapsed:?}"
     );
 }
 
@@ -50,7 +49,7 @@ fn test_infinite_loop_timeout() {
     assert_eq!(output.status, Status::Timeout, "Status should be Timeout");
 }
 
-/// Test that max_pids limit is enforced.
+/// Test that `max_pids` limit is enforced.
 #[test]
 #[ignore]
 fn test_max_pids_enforced() {
@@ -97,8 +96,7 @@ fn test_output_limit_enforced() {
 
     assert!(
         total_output <= 1024 * 4, // Allow some buffer for implementation
-        "Output should be limited to ~1KB, got {} bytes",
-        total_output
+        "Output should be limited to ~1KB, got {total_output} bytes"
     );
 
     // Either output was truncated or process was killed when limit exceeded
@@ -140,9 +138,7 @@ fn test_memory_limit_set() {
     // Just verify the command ran - actual memory enforcement depends on system config
     assert!(
         output.exit_code.is_some(),
-        "Should get exit code. stdout: {}, stderr: {}",
-        stdout,
-        stderr
+        "Should get exit code. stdout: {stdout}, stderr: {stderr}"
     );
 }
 
@@ -167,8 +163,7 @@ fn test_fd_limit_set() {
             // Verify limit is set to a reasonable value (not unlimited)
             assert!(
                 limit < 1000000,
-                "FD limit should be reasonable, got {}",
-                limit
+                "FD limit should be reasonable, got {limit}"
             );
         }
     }

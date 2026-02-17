@@ -18,7 +18,7 @@ fn main() {
                 output.stdout_str().lines().next().unwrap_or("")
             );
         }
-        Err(e) => eprintln!("   Error: {}", e),
+        Err(e) => eprintln!("   Error: {e}"),
     }
 
     // Python test
@@ -32,7 +32,7 @@ fn main() {
             );
             println!("   Output: {}", output.stdout_str().trim());
         }
-        Err(e) => eprintln!("   Error: {}", e),
+        Err(e) => eprintln!("   Error: {e}"),
     }
 
     // Go test
@@ -49,7 +49,7 @@ fn main() {
             );
             println!("   Output: {}", output.stdout_str().trim());
         }
-        Err(e) => eprintln!("   Error: {}", e),
+        Err(e) => eprintln!("   Error: {e}"),
     }
 
     println!("\n=== All tests completed ===");

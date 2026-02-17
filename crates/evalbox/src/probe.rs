@@ -1,4 +1,4 @@
-//! Probe trait and RuntimeInfo types.
+//! Probe trait and `RuntimeInfo` types.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

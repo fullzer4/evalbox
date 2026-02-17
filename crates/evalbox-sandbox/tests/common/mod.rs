@@ -4,17 +4,14 @@ use std::path::PathBuf;
 
 /// Load a pre-compiled C payload binary.
 ///
-/// Payloads are compiled by build.rs and stored in OUT_DIR/payloads/.
+/// Payloads are compiled by build.rs and stored in `OUT_DIR/payloads`/.
 pub fn payload(name: &str) -> Vec<u8> {
     if let Some(path) = find_payload(name) {
         return std::fs::read(&path)
             .unwrap_or_else(|e| panic!("Failed to read payload {}: {}", path.display(), e));
     }
 
-    panic!(
-        "Payload '{}' not found. Run `cargo build -p evalbox-sandbox` first.",
-        name
-    );
+    panic!("Payload '{name}' not found. Run `cargo build -p evalbox-sandbox` first.");
 }
 
 /// Find payload in cargo's build directory structure.
@@ -97,4 +94,5 @@ pub fn skip_if_no_namespaces() -> bool {
 pub const SIGSYS: i32 = 31;
 
 /// SIGKILL signal number.
+#[allow(dead_code)]
 pub const SIGKILL: i32 = 9;
