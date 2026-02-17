@@ -6,81 +6,34 @@ Execute code like `eval()`, but safe. No containers, no VMs, no root.
 [![Crates.io](https://img.shields.io/crates/v/evalbox.svg)](https://crates.io/crates/evalbox)
 [![Documentation](https://docs.rs/evalbox/badge.svg)](https://docs.rs/evalbox)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)](https://www.rust-lang.org)
 
 ## Features
 
 - **Simple** - One function call, security handled for you
-- **Multi-language** - Python, Go, Shell (Node and Rust planned)
+- **Multi-language** - Python, Go, and shell/terminal commands
 - **Fast** - Millisecond startup, no containers or VMs
-- **Embeddable** - Library with FFI bindings
+- **Secure** - 7 layers of isolation (namespaces, Landlock, seccomp, rlimits)
 
 ## Quick Start
 
 ```rust
-use evalbox::Sandbox;
+use evalbox::{shell, python, go};
 use std::time::Duration;
 
-// Simple command
-let output = Sandbox::run(&["echo", "hello"])?;
-assert_eq!(output.stdout, b"hello\n");
+// Terminal commands
+let output = shell::run("echo hello").exec()?;
 
-// Shell script
-let output = Sandbox::shell("echo hello && pwd")?;
+// Python
+let output = python::run("print(2 + 2)").exec()?;
 
-// With files and options
-let output = Sandbox::builder()
-    .cmd(["python3", "main.py"])
-    .file("main.py", b"print('hello')")
+// Go (auto-wraps into main())
+let output = go::run(r#"fmt.Println("hello")"#).exec()?;
+
+// With options
+let output = shell::run("curl https://example.com")
     .timeout(Duration::from_secs(10))
-    .memory(256 * 1024 * 1024)
-    .run()?;
-```
-
-### Language Runtimes (feature-gated)
-
-```rust
-// Python (feature = "python")
-use evalbox::python;
-let output = python::run("print(2 + 2)")?;
-
-// Go with auto-wrap (feature = "go")
-use evalbox::go;
-let output = go::run(r#"fmt.Println("hello")"#)?;
-```
-
-## Concurrent Execution
-
-```rust
-use evalbox::{Sandbox, Executor, Event};
-use std::time::Duration;
-
-let mut executor = Executor::new()?;
-
-// Spawn multiple sandboxes
-let plan1 = Sandbox::builder().cmd(["sleep", "1"]).build()?;
-let plan2 = Sandbox::builder().cmd(["echo", "fast"]).build()?;
-
-executor.spawn(plan1)?;
-executor.spawn(plan2)?;
-
-// Event-driven processing
-loop {
-    for event in executor.poll(Some(Duration::from_secs(1)))? {
-        match event {
-            Event::Completed { id, output } => {
-                println!("{}: {}", id, output.stdout_str());
-            }
-            Event::Stdout { id, data } => {
-                print!("[{}] {}", id, String::from_utf8_lossy(&data));
-            }
-            _ => {}
-        }
-    }
-    if executor.active_count() == 0 {
-        break;
-    }
-}
+    .network(true)
+    .exec()?;
 ```
 
 ## Requirements
@@ -88,11 +41,18 @@ loop {
 - Linux kernel 5.13+ (Landlock ABI 1+)
 - User namespaces enabled
 
-## Non-Goals
+## Installation
 
-- Windows support
-- GUI/GPU sandboxing
-- Persistent containers (use Docker)
+```toml
+[dependencies]
+evalbox = { version = "0.1", features = ["python", "go", "shell"] }
+```
+
+## Security
+
+7 layers of isolation: user namespaces, PID namespace, network namespace, mount namespace + pivot_root, Landlock LSM, seccomp BPF, rlimits.
+
+See [SECURITY.md](docs/SECURITY.md) for threat model and CVE protections.
 
 ## Documentation
 
