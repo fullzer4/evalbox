@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -19,9 +19,9 @@ keywords = ["sandbox", "isolation", "security", "landlock", "seccomp"]
 categories = ["os::linux-apis", "development-tools"]
 
 [workspace.dependencies]
-evalbox = { version = "0.1.0", path = "crates/evalbox" }
-evalbox-sys = { version = "0.1.0", path = "crates/evalbox-sys" }
-evalbox-sandbox = { version = "0.1.0", path = "crates/evalbox-sandbox" }
+evalbox = { version = "0.1.1", path = "crates/evalbox" }
+evalbox-sys = { version = "0.1.1", path = "crates/evalbox-sys" }
+evalbox-sandbox = { version = "0.1.1", path = "crates/evalbox-sandbox" }
 
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
