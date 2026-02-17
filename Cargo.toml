@@ -1,77 +1,71 @@
 [workspace]
-resolver = "2"
-members = ["crates/*"]
+resolver = "3"
+members = [
+    "crates/evalbox",
+    "crates/evalbox-sys",
+    "crates/evalbox-sandbox",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "Apache-2.0"
-repository = "https://github.com/vektia/leeward"
-authors = ["Vektia"]
 rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["fullzer4 <gabrielpelizzaro@gmail.com>"]
+repository = "https://github.com/fullzer4/evalbox"
+homepage = "https://github.com/fullzer4/evalbox"
+readme = "README.md"
+keywords = ["sandbox", "isolation", "security", "landlock", "seccomp"]
+categories = ["os::linux-apis", "development-tools"]
 
 [workspace.dependencies]
-nix = { version = "0.30", features = ["sched", "mount", "signal", "user", "process", "fs", "mman"] }
-landlock = "0.4"
-seccompiler = "0.4"
-caps = "0.5"
+evalbox = { version = "0.1.0", path = "crates/evalbox" }
+evalbox-sys = { version = "0.1.0", path = "crates/evalbox-sys" }
+evalbox-sandbox = { version = "0.1.0", path = "crates/evalbox-sandbox" }
 
-# io_uring for zero-copy IPC
-io-uring = "0.7"
-
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
-# Serialization
+libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rmp-serde = "1"
-
-# Error handling
+rustix = { version = "1", features = ["event", "process", "system", "mount", "fs"] }
 thiserror = "2"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Signal handling
-signal-hook = "0.3"
-signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
-
-# Synchronization
-parking_lot = "0.12"
-
-# System programming
-libc = "0.2"
-once_cell = "1"
-
-# CLI
-clap = { version = "4", features = ["derive"] }
-
-# Shared memory
-memfd = "0.6"
-
-# Internal dependencies
-leeward-core = { path = "crates/leeward-core" }
+tempfile = "3"
+mio = { version = "1.0", features = ["os-poll", "os-ext"] }
+which = "7"
 
 [workspace.lints.rust]
-unsafe_code = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_imports = "warn"
+unused_must_use = "warn"
 
 [workspace.lints.clippy]
-all = "warn"
-pedantic = "warn"
-nursery = "warn"
+all = { level = "warn", priority = -1 }
+# Useful pedantic lints (not all)
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+cloned_instead_of_copied = "warn"
+doc_markdown = "warn"
+explicit_iter_loop = "warn"
+inefficient_to_string = "warn"
+ptr_as_ptr = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+
+[profile.dev]
+opt-level = 0
+debug = true
 
 [profile.release]
-lto = "fat"
+opt-level = 3
+lto = "thin"
 codegen-units = 1
-panic = "abort"
 strip = true
-opt-level = 3
-
-[profile.release.package."*"]
-opt-level = 3
+panic = "abort"
 
 [profile.bench]
 inherits = "release"
-debug = true
+lto = "fat"
+codegen-units = 1

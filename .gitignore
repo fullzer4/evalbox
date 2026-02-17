@@ -1,31 +1,3 @@
-# Python
-__pycache__/
-.pytest_cache/
-.ruff_cache
-*.pyc
-*.pyo
-*.pyd
-.venv/
-.env/
-dist/
-build/
-*.egg-info/
-*.whl
-
-# Rust
+.direnv
 target/
-*.so
-
-# Development tools
-.direnv/
-.devenv/
-.pre-commit-config.yaml
-.cargo-home/
-
-# Nix build results
-result
-result-*
-
-# Runtime files
-*.sock
-.leeward.sock
+bindings/

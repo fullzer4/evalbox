@@ -1,0 +1,37 @@
+[package]
+name = "evalbox"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Unprivileged sandbox for arbitrary code execution"
+
+[dependencies]
+evalbox-sandbox.workspace = true
+thiserror.workspace = true
+which.workspace = true
+
+# Feature-gated dependencies
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+goblin = { version = "0.9", optional = true }
+memmap2 = { version = "0.9", optional = true }
+walkdir = { version = "2", optional = true }
+dashmap = { version = "6", optional = true }
+tempfile = { workspace = true, optional = true }
+regex = { version = "1", optional = true }
+
+[features]
+default = ["python", "go", "shell"]
+shell = []  # Shell is always available (no extra deps)
+python = ["dep:goblin", "dep:memmap2", "dep:walkdir", "dep:dashmap", "dep:serde", "dep:serde_json"]
+go = ["dep:tempfile", "dep:regex"]
+node = ["dep:serde", "dep:serde_json", "dep:tempfile"]
+rust-lang = ["dep:tempfile", "dep:serde", "dep:serde_json"]
+testing = []  # Exposes clear_cache() for test isolation
+
+[lints]
+workspace = true

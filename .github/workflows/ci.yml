@@ -2,36 +2,57 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
 
 jobs:
-  check:
+  fmt:
+    name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all --check
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v24
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --all-features
+
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps --all-features
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --lib --all-features
+
+  semver-check:
+    name: SemVer Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Check semver
+        uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Check flake
-        run: nix flake check
-
-      - name: Format check
-        run: nix develop -c cargo fmt -- --check
-
-      - name: Clippy
-        run: nix develop -c cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Test
-        run: nix develop -c cargo test --workspace
-
-      - name: Build
-        run: nix build .#leeward-x86_64
-
-      - name: Security audit
-        run: nix develop -c cargo audit
+          package: evalbox

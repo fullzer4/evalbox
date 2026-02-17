@@ -1,112 +1,25 @@
 name: Release
 
+permissions:
+  pull-requests: write
+  contents: write
+
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag (e.g., v0.1.0)'
-        required: true
-        type: string
+    branches: [main]
 
 jobs:
-  build:
+  release-plz:
+    name: Release-plz
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v24
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            accept-flake-config = true
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v14
-        with:
-          name: leeward
-          skipPush: true
-
-      - name: Build all packages
-        run: |
-          # Build all outputs
-          nix build .#leeward-x86_64 -L
-          nix build .#leeward-aarch64 -L
-          nix build .#leeward-static -L
-          nix build .#leeward-deb -L
-
-          # Copy artifacts
-          mkdir -p artifacts
-          cp -L result*/* artifacts/ || true
-
-      - name: Create release archives
-        run: |
-          cd artifacts
-
-          # Create tarballs for each architecture
-          for arch in x86_64 aarch64; do
-            if [ -d "leeward-$arch" ]; then
-              tar czf "leeward-${arch}-linux.tar.gz" "leeward-$arch"
-            fi
-          done
-
-          # Create checksums
-          sha256sum *.tar.gz *.deb > checksums.txt || true
-
-          cd ..
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-artifacts
-          path: artifacts/*
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: release-artifacts
-          path: artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/*.tar.gz
-            artifacts/*.deb
-            artifacts/checksums.txt
-          body: |
-            ## Installation
-
-            ### Debian/Ubuntu
-            ```bash
-            wget https://github.com/vektia/leeward/releases/latest/download/leeward_*_amd64.deb
-            sudo dpkg -i leeward_*.deb
-            ```
-
-            ### Binary (x86_64)
-            ```bash
-            curl -L https://github.com/vektia/leeward/releases/latest/download/leeward-x86_64-linux.tar.gz | tar xz
-            sudo mv leeward-x86_64/* /usr/local/bin/
-            ```
-
-            ### Nix
-            ```nix
-            nix run github:vektia/leeward/${{ github.event.inputs.tag || github.ref_name }}
-            ```
-
-            See [CHANGELOG.md](https://github.com/vektia/leeward/blob/main/CHANGELOG.md) for changes.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run release-plz
+        uses: MarcoIeni/release-plz-action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

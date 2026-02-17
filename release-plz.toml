@@ -1,0 +1,15 @@
+[workspace]
+changelog_update = true
+git_release_enable = true
+git_tag_enable = true
+pr_labels = ["release"]
+publish = true
+
+[[package]]
+name = "evalbox-sys"
+
+[[package]]
+name = "evalbox-sandbox"
+
+[[package]]
+name = "evalbox"
