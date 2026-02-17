@@ -19,7 +19,7 @@
 //!
 //! - `deny_setgroups` must be called BEFORE writing `gid_map` (kernel requirement)
 //! - The process appears as root inside but has no real privileges
-//! - This enables pivot_root and mount operations inside the namespace
+//! - This enables `pivot_root` and mount operations inside the namespace
 
 use std::fs;
 use std::io;
