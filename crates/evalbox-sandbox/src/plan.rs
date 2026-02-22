@@ -41,6 +41,22 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// Seccomp user notification mode.
+///
+/// Controls how the supervisor handles intercepted syscalls from the sandboxed child.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NotifyMode {
+    /// No seccomp notify filter installed. Zero overhead. Default.
+    #[default]
+    Disabled,
+    /// Supervisor logs syscalls and returns `SECCOMP_USER_NOTIF_FLAG_CONTINUE`.
+    /// Minimal overhead. For debugging/auditing.
+    Monitor,
+    /// Supervisor intercepts FS syscalls, translates paths via `VirtualFs`,
+    /// opens files at translated paths, injects fd via `SECCOMP_IOCTL_NOTIF_ADDFD`.
+    Virtualize,
+}
+
 /// Mount point configuration.
 ///
 /// This is the canonical Mount type used throughout evalbox.
@@ -273,7 +289,7 @@ impl UserFile {
 #[derive(Debug, Clone)]
 pub struct Plan {
     pub cmd: Vec<String>,
-    /// Pre-resolved binary path. If set, sandbox uses this instead of resolving `cmd\[0\]`.
+    /// Pre-resolved binary path. If set, sandbox uses this instead of resolving `cmd[0]`.
     /// This allows evalbox to do binary resolution before calling sandbox.
     pub binary_path: Option<PathBuf>,
     pub env: HashMap<String, String>,
@@ -291,11 +307,9 @@ pub struct Plan {
     pub syscalls: Option<Syscalls>,
     /// Custom Landlock configuration.
     pub landlock: Option<Landlock>,
+    /// Seccomp user notification mode.
+    pub notify_mode: NotifyMode,
 }
-
-/// Type alias for backwards compatibility.
-#[deprecated(since = "0.2.0", note = "Use `Plan` instead")]
-pub type SandboxPlan = Plan;
 
 impl Default for Plan {
     fn default() -> Self {
@@ -315,6 +329,7 @@ impl Default for Plan {
             network_blocked: true,
             syscalls: None,
             landlock: None,
+            notify_mode: NotifyMode::Disabled,
         }
     }
 }
@@ -422,6 +437,16 @@ impl Plan {
     /// Set custom Landlock configuration.
     pub fn landlock(mut self, landlock: Landlock) -> Self {
         self.landlock = Some(landlock);
+        self
+    }
+
+    /// Set the seccomp user notification mode.
+    ///
+    /// - `Disabled` (default): No notify filter, zero overhead.
+    /// - `Monitor`: Log intercepted syscalls for debugging.
+    /// - `Virtualize`: Full filesystem virtualization via path translation.
+    pub fn notify_mode(mut self, mode: NotifyMode) -> Self {
+        self.notify_mode = mode;
         self
     }
 

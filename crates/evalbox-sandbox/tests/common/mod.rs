@@ -63,33 +63,6 @@ fn find_payload(name: &str) -> Option<PathBuf> {
     None
 }
 
-/// Check if we have permission to create user namespaces.
-pub fn can_create_namespaces() -> bool {
-    // Check kernel parameter
-    if let Ok(content) = std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone") {
-        if content.trim() == "0" {
-            return false;
-        }
-    }
-
-    // Try to actually create a namespace
-    let result = std::process::Command::new("unshare")
-        .args(["--user", "--map-root-user", "true"])
-        .output();
-
-    result.map(|o| o.status.success()).unwrap_or(false)
-}
-
-/// Skip test if namespaces aren't available. Call at start of test.
-pub fn skip_if_no_namespaces() -> bool {
-    if !can_create_namespaces() {
-        eprintln!("Skipping: Cannot create user namespaces");
-        true
-    } else {
-        false
-    }
-}
-
 /// SIGSYS signal number (seccomp violation).
 pub const SIGSYS: i32 = 31;
 

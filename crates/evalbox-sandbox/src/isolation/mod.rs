@@ -2,16 +2,10 @@
 //!
 //! This module contains all the security isolation layers:
 //!
-//! - **namespace** - User namespace and ID mapping setup
-//! - **rootfs** - Filesystem setup (bind mounts, `pivot_root`, rlimits)
-//! - **lockdown** - Security restrictions (Landlock, seccomp, capabilities)
+//! - **lockdown** - Security restrictions (Landlock v5, seccomp, securebits, capabilities)
+//! - **rlimits** - Resource limits (memory, CPU, files, processes)
 
 mod lockdown;
-mod namespace;
-mod rootfs;
+pub mod rlimits;
 
-pub use lockdown::{LockdownError, lockdown};
-pub use namespace::setup_id_maps;
-pub use rootfs::{
-    bind_mount, make_rprivate, mount_minimal_dev, mount_proc, pivot_root_and_cleanup, set_hostname,
-};
+pub use lockdown::{LockdownError, close_extra_fds, lockdown};

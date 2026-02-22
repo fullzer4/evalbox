@@ -1,14 +1,14 @@
 //! Workspace and pipe management for sandboxed execution.
 //!
-//! The workspace is a temporary directory that becomes the sandbox root after `pivot_root`.
-//! It contains all the pipes for parent-child communication.
+//! The workspace is a temporary directory containing the sandbox's writable areas
+//! and all the pipes for parent-child communication.
 //!
 //! ## Pipes
 //!
 //! - **stdin**: Parent writes → Child reads
 //! - **stdout**: Child writes → Parent reads
 //! - **stderr**: Child writes → Parent reads
-//! - **sync**: Eventfd pair for parent-child synchronization (UID map setup)
+//! - **sync**: Eventfd for parent-child synchronization
 //!
 //! ## Important: Pipe Hygiene
 //!
@@ -59,6 +59,9 @@ impl Pipe {
 }
 
 /// Eventfd-based parent-child synchronization.
+///
+/// Used when `NotifyMode::Disabled` — the child signals readiness via eventfd
+/// after completing setup, and the parent writes back to let it proceed to exec.
 #[derive(Debug)]
 pub struct SyncPair {
     pub child_ready: OwnedFd,
@@ -150,7 +153,6 @@ impl Workspace {
         fs::write(&full, content)?;
 
         if executable {
-            // Set executable permission (rwxr-xr-x)
             fs::set_permissions(&full, fs::Permissions::from_mode(0o755))?;
         }
 
@@ -163,57 +165,14 @@ impl Workspace {
         Ok(full)
     }
 
+    /// Create standard sandbox directories.
+    ///
+    /// Only creates the writable workspace directories (work, tmp, home).
+    /// No rootfs directories (proc, dev, etc.) needed since we don't use `pivot_root`.
     pub fn setup_sandbox_dirs(&self) -> io::Result<()> {
-        for dir in [
-            "proc", "dev", "tmp", "home", "work", "usr", "bin", "lib", "lib64", "etc",
-        ] {
+        for dir in ["work", "tmp", "home"] {
             self.create_dir(dir)?;
         }
-        self.setup_minimal_etc()?;
-        Ok(())
-    }
-
-    /// Create minimal /etc files to prevent information leakage.
-    ///
-    /// Instead of mounting the host's /etc (which contains sensitive info like
-    /// /etc/passwd, /etc/shadow), we create a minimal /etc with only essential files.
-    pub fn setup_minimal_etc(&self) -> io::Result<()> {
-        let etc = self.root.join("etc");
-
-        // Minimal /etc/passwd - just nobody user
-        fs::write(
-            etc.join("passwd"),
-            "nobody:x:65534:65534:Unprivileged user:/nonexistent:/usr/sbin/nologin\n",
-        )?;
-
-        // Minimal /etc/group - just nobody group
-        fs::write(etc.join("group"), "nogroup:x:65534:\n")?;
-
-        // Minimal /etc/hosts - localhost only
-        fs::write(etc.join("hosts"), "127.0.0.1 localhost\n::1 localhost\n")?;
-
-        // Minimal /etc/nsswitch.conf - required for name resolution
-        fs::write(
-            etc.join("nsswitch.conf"),
-            "passwd: files\ngroup: files\nhosts: files dns\n",
-        )?;
-
-        // Copy /etc/ld.so.cache from host if it exists (needed for dynamic linking)
-        let host_ldcache = Path::new("/etc/ld.so.cache");
-        if host_ldcache.exists() {
-            if let Ok(content) = fs::read(host_ldcache) {
-                fs::write(etc.join("ld.so.cache"), content)?;
-            }
-        }
-
-        // Create /etc/ssl directory for certificates
-        let ssl_dir = etc.join("ssl");
-        fs::create_dir_all(&ssl_dir)?;
-
-        // Minimal /etc/resolv.conf - empty (network is blocked by default)
-        // When network is enabled, Landlock will allow DNS
-        fs::write(etc.join("resolv.conf"), "# DNS disabled in sandbox\n")?;
-
         Ok(())
     }
 }
@@ -251,5 +210,14 @@ mod tests {
         assert!(path.exists());
         let perms = std::fs::metadata(&path).unwrap().permissions();
         assert_eq!(perms.mode() & 0o777, 0o755);
+    }
+
+    #[test]
+    fn workspace_sandbox_dirs() {
+        let ws = Workspace::new().unwrap();
+        ws.setup_sandbox_dirs().unwrap();
+        assert!(ws.root().join("work").exists());
+        assert!(ws.root().join("tmp").exists());
+        assert!(ws.root().join("home").exists());
     }
 }

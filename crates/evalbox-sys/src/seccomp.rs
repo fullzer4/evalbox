@@ -47,14 +47,14 @@
 //! - `memfd_create` + `execveat` - Enables fileless execution (bypass Landlock)
 //! - `setresuid`/`setresgid` - No reason to change UID in sandbox
 //! - `setsid`/`setpgid` - Session manipulation, unnecessary
-//! - `ioctl` - Too powerful without argument filtering (TODO: whitelist specific codes)
+//! - `ioctl` - Allowed with argument filtering (TIOCSTI, TIOCSETD, TIOCLINUX blocked)
 //!
 //! ## Security Notes
 //!
 //! - Filter is permanent - cannot be removed once applied
 //! - Requires `PR_SET_NO_NEW_PRIVS` first
 //! - Blocked syscall = immediate process termination (SIGSYS)
-//! - `kill`/`tgkill` are safe because we use PID namespace (`CLONE_NEWPID`)
+//! - `kill`/`tgkill` are safe due to Landlock v5 `SCOPE_SIGNAL` isolation
 //! - `prctl` allowed but `PR_SET_SECCOMP` has no effect (filter already applied)
 
 use rustix::io::Errno;
@@ -64,6 +64,7 @@ use crate::last_errno;
 // Seccomp constants
 const SECCOMP_SET_MODE_FILTER: u32 = 1;
 const SECCOMP_RET_KILL_PROCESS: u32 = 0x80000000;
+const SECCOMP_RET_USER_NOTIF: u32 = 0x7fc00000;
 const SECCOMP_RET_ALLOW: u32 = 0x7fff0000;
 // Return ENOSYS (38) to allow graceful fallback
 const SECCOMP_RET_ERRNO_ENOSYS: u32 = 0x00050000 | 38;
@@ -172,7 +173,7 @@ pub struct SockFprog {
 /// - `setsid`/`setpgid` - Session manipulation unnecessary
 ///
 /// ## Notes:
-/// - `kill`/`tgkill` safe due to PID namespace isolation
+/// - `kill`/`tgkill` safe due to Landlock v5 `SCOPE_SIGNAL` isolation
 /// - `prctl` kept for runtime needs (`PR_SET_NAME`, etc.)
 pub const DEFAULT_WHITELIST: &[i64] = &[
     // === Basic I/O ===
@@ -291,7 +292,7 @@ pub const DEFAULT_WHITELIST: &[i64] = &[
     libc::SYS_fchdir,
     libc::SYS_readlink,
     libc::SYS_readlinkat,
-    // === Signals (safe due to PID namespace) ===
+    // === Signals (safe due to Landlock SCOPE_SIGNAL) ===
     libc::SYS_rt_sigaction,
     libc::SYS_rt_sigprocmask,
     libc::SYS_rt_sigreturn,
@@ -299,9 +300,9 @@ pub const DEFAULT_WHITELIST: &[i64] = &[
     libc::SYS_rt_sigpending,
     libc::SYS_rt_sigtimedwait,
     libc::SYS_sigaltstack,
-    libc::SYS_kill,   // Safe: PID namespace isolates
-    libc::SYS_tgkill, // Safe: PID namespace isolates
-    libc::SYS_tkill,  // Safe: PID namespace isolates
+    libc::SYS_kill,   // Safe: Landlock SCOPE_SIGNAL isolates
+    libc::SYS_tgkill, // Safe: Landlock SCOPE_SIGNAL isolates
+    libc::SYS_tkill,  // Safe: Landlock SCOPE_SIGNAL isolates
     // === Process control ===
     libc::SYS_execve,
     // execveat REMOVED - with memfd_create enables fileless execution
@@ -567,6 +568,81 @@ pub fn seccomp_available() -> bool {
     unsafe { libc::prctl(libc::PR_GET_SECCOMP, 0, 0, 0, 0) >= 0 }
 }
 
+/// Builds a BPF filter that returns `SECCOMP_RET_USER_NOTIF` for the listed
+/// syscalls and `SECCOMP_RET_ALLOW` for everything else.
+///
+/// This filter is installed *before* the kill filter. The kernel evaluates all
+/// stacked filters and returns the strictest verdict, so:
+/// - Syscall in both ALLOW lists → ALLOW
+/// - Syscall in NOTIFY + ALLOW → NOTIFY (supervisor decides)
+/// - Syscall not in kill filter whitelist → KILL (regardless of notify filter)
+///
+/// # Panics
+///
+/// Panics if `syscalls.len()` > 200 (BPF jump offsets are u8).
+pub fn build_notify_filter(syscalls: &[i64]) -> Vec<SockFilter> {
+    assert!(
+        syscalls.len() <= MAX_WHITELIST_SIZE,
+        "notify syscall list too large: {} > {}",
+        syscalls.len(),
+        MAX_WHITELIST_SIZE
+    );
+
+    let n = syscalls.len();
+    let mut filter = Vec::with_capacity(n + 8);
+
+    // Architecture check
+    filter.push(SockFilter::stmt(BPF_LD | BPF_W | BPF_ABS, OFFSET_ARCH));
+    filter.push(SockFilter::jump(
+        BPF_JMP | BPF_JEQ | BPF_K,
+        AUDIT_ARCH_X86_64,
+        1,
+        0,
+    ));
+    filter.push(SockFilter::stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
+
+    // Load syscall number
+    filter.push(SockFilter::stmt(
+        BPF_LD | BPF_W | BPF_ABS,
+        OFFSET_SYSCALL_NR,
+    ));
+
+    // Check each syscall → jump to NOTIFY
+    for (i, &nr) in syscalls.iter().enumerate() {
+        let notify_offset = (n - i) as u8; // jump to NOTIFY instruction
+        filter.push(SockFilter::jump(
+            BPF_JMP | BPF_JEQ | BPF_K,
+            nr as u32,
+            notify_offset,
+            0,
+        ));
+    }
+
+    // Default: ALLOW
+    filter.push(SockFilter::stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
+
+    // NOTIFY
+    filter.push(SockFilter::stmt(BPF_RET | BPF_K, SECCOMP_RET_USER_NOTIF));
+
+    filter
+}
+
+/// Syscalls that are intercepted by the notify filter for filesystem virtualization.
+pub const NOTIFY_FS_SYSCALLS: &[i64] = &[
+    libc::SYS_openat,
+    libc::SYS_open,
+    libc::SYS_creat,
+    libc::SYS_access,
+    libc::SYS_faccessat,
+    libc::SYS_faccessat2,
+    libc::SYS_stat,
+    libc::SYS_lstat,
+    libc::SYS_newfstatat,
+    libc::SYS_statx,
+    libc::SYS_readlink,
+    libc::SYS_readlinkat,
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -658,5 +734,21 @@ mod tests {
     fn whitelist_overflow_panics() {
         let huge: Vec<i64> = (0..300).map(|i| i as i64).collect();
         build_whitelist_filter(&huge);
+    }
+
+    #[test]
+    fn notify_filter_structure() {
+        let syscalls = &[libc::SYS_openat, libc::SYS_open, libc::SYS_stat];
+        let filter = build_notify_filter(syscalls);
+        // 3 (arch) + 1 (load) + 3 (checks) + 1 (allow) + 1 (notify) = 9
+        assert_eq!(filter.len(), 9);
+    }
+
+    #[test]
+    fn notify_fs_syscalls_present() {
+        assert!(NOTIFY_FS_SYSCALLS.contains(&libc::SYS_openat));
+        assert!(NOTIFY_FS_SYSCALLS.contains(&libc::SYS_open));
+        assert!(NOTIFY_FS_SYSCALLS.contains(&libc::SYS_stat));
+        assert!(NOTIFY_FS_SYSCALLS.contains(&libc::SYS_readlink));
     }
 }

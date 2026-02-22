@@ -101,7 +101,8 @@ mod tests {
         let sys_paths = &*SYSTEM_PATHS;
         let mounts = detect_mounts(Path::new("/usr/bin/echo"), sys_paths);
 
-        if sys_paths.system_type == SystemType::Fhs {
+        // Only check for /usr mount if we're on an actual FHS system with /usr
+        if sys_paths.system_type == SystemType::Fhs && Path::new("/usr").exists() {
             assert!(mounts.iter().any(|m| m.source == Path::new("/usr")));
         }
     }
