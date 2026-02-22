@@ -2,7 +2,7 @@
 
 ## Overview
 
-evalbox is a secure sandbox for executing untrusted code on Linux. It provides millisecond-startup isolation using Linux namespaces, Landlock LSM, and seccomp-BPF.
+evalbox is a secure sandbox for executing untrusted code on Linux. It provides millisecond-startup isolation using Landlock LSM v5, seccomp-BPF, and rlimits — no namespaces, no containers, no root.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -29,23 +29,23 @@ evalbox is a secure sandbox for executing untrusted code on Linux. It provides m
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                     Isolation                             │   │
-│  │   • Namespaces (user, pid, net, mount, uts, ipc)         │   │
-│  │   • pivot_root + minimal rootfs                          │   │
-│  │   • Landlock filesystem rules                            │   │
-│  │   • Seccomp syscall filter                               │   │
+│  │   • Landlock v5 (filesystem, network, signal, IPC)       │   │
+│  │   • Seccomp-BPF (syscall whitelist)                      │   │
+│  │   • rlimits (memory, CPU, PIDs, fds)                     │   │
+│  │   • Privilege hardening (securebits, capability drop)    │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      evalbox-sys                                 │
-│   Raw Linux syscalls: clone3, pidfd, seccomp, landlock          │
+│   Raw Linux syscalls: seccomp, landlock, seccomp_notify          │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                       Linux Kernel                               │
-│   namespaces │ seccomp-bpf │ landlock │ cgroups │ rlimits       │
+│           seccomp-bpf │ landlock │ rlimits                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,17 +68,18 @@ evalbox/
 │       ├── workspace.rs     # Temporary filesystem setup
 │       ├── monitor.rs       # Process monitoring, output capture
 │       ├── isolation/       # Isolation mechanisms
-│       │   ├── namespace.rs # User/PID/Net namespace setup
-│       │   ├── rootfs.rs    # Mount namespace, pivot_root
-│       │   └── lockdown.rs  # Landlock + seccomp application
+│       │   ├── lockdown.rs  # Landlock v5 + securebits + cap drop
+│       │   └── rlimits.rs   # Resource limits
+│       ├── notify/          # Seccomp user notify (optional)
 │       ├── validate.rs      # Input validation
-│       └── sysinfo.rs       # System detection (Nix, paths)
+│       └── resolve.rs       # Binary resolution
 │
 └── evalbox-sys/             # Low-level syscalls
     └── src/
         ├── seccomp.rs       # BPF filter generation
+        ├── seccomp_notify.rs # Seccomp user notify support
         ├── landlock.rs      # Landlock ruleset API
-        └── check.rs         # Capability detection
+        └── check.rs         # System capability detection
 ```
 
 ---
@@ -132,13 +133,6 @@ loop {
 }
 ```
 
-### Platform Behavior
-
-| Platform | Process Monitoring | I/O Multiplexing |
-|----------|-------------------|------------------|
-| Linux    | pidfd + epoll     | mio (epoll)      |
-| macOS    | vsock to VM       | mio (kqueue)     |
-
 ---
 
 ## Sandbox Lifecycle
@@ -156,85 +150,93 @@ loop {
 ┌──────────────────────────────────────────────────────────────────┐
 │  2. WORKSPACE PREPARATION                                        │
 │     • Create tempdir (/tmp/evalbox-XXXXX)                       │
-│     • Setup directory structure (/work, /tmp, /etc)             │
-│     • Write user files                                           │
-│     • Create pipes (stdin, stdout, stderr)                      │
+│     • Create writable directories: /work, /tmp, /home           │
+│     • Write user files to /work                                  │
+│     • Create pipes (stdin, stdout, stderr) + eventfd sync       │
 └──────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  3. CLONE WITH NAMESPACES                                        │
-│     clone3(CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET |        │
-│            CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC)           │
+│  3. FORK                                                         │
+│     fork() — plain fork, no CLONE_NEW* flags                    │
 │                                                                  │
 │     Parent                          Child                        │
 │       │                               │                          │
-│       ├─ Write UID/GID maps           ├─ Wait for parent        │
-│       ├─ Signal ready ────────────────►                          │
-│       │                               ├─ Setup isolation        │
-│       │                               │   (see step 4)          │
-│       ▼                               ▼                          │
+│       ├─ Open pidfd                   ├─ Close parent pipe ends  │
+│       ├─ Wait for child ready         ├─ Setup stdio (dup2)     │
+│       ├─ Signal to proceed            ├─ chdir(workspace/work)  │
+│       ▼                               ├─ Apply lockdown (step 4)│
+│                                       ▼                          │
 └──────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  4. CHILD ISOLATION SETUP                                        │
+│  4. CHILD LOCKDOWN (irreversible)                                │
 │                                                                  │
 │     ┌─────────────────────────────────────────────────────────┐ │
-│     │  a) Mount namespace                                      │ │
-│     │     • Bind mount /usr, /lib, /lib64 (read-only)         │ │
-│     │     • Bind mount workspace to /work                      │ │
-│     │     • Mount minimal /dev (null, zero, urandom)          │ │
-│     │     • pivot_root to new root                            │ │
-│     │     • Unmount old root                                   │ │
+│     │  a) NO_NEW_PRIVS                                        │ │
+│     │     prctl(PR_SET_NO_NEW_PRIVS) — required before        │ │
+│     │     Landlock and seccomp                                │ │
 │     └─────────────────────────────────────────────────────────┘ │
 │     ┌─────────────────────────────────────────────────────────┐ │
-│     │  b) Landlock (kernel 5.13+)                              │ │
-│     │     • Create ruleset with FS restrictions               │ │
-│     │     • Allow read-only: /usr, /lib, /bin, /etc           │ │
-│     │     • Allow read-write: /work, /tmp                     │ │
-│     │     • Enforce ruleset                                    │ │
-│     │     (See SECURITY.md for details)                       │ │
+│     │  b) Landlock v5                                         │ │
+│     │     • Filesystem: read-only /usr, /lib, /etc, /bin      │ │
+│     │       read-write workspace/work, /tmp, /home            │ │
+│     │     • Network: block TCP bind + connect (ABI 4+)        │ │
+│     │     • Signals: block cross-sandbox signals (ABI 5)      │ │
+│     │     • IPC: block abstract unix sockets (ABI 5)          │ │
 │     └─────────────────────────────────────────────────────────┘ │
 │     ┌─────────────────────────────────────────────────────────┐ │
-│     │  c) Seccomp BPF                                          │ │
-│     │     • Load syscall whitelist filter                     │ │
-│     │     • Block dangerous syscalls (ptrace, mount, etc.)    │ │
-│     │     • Filter clone() flags, socket() domains            │ │
-│     │     • Filter dangerous ioctls (TIOCSTI, etc.)           │ │
-│     │     (See SECURITY.md for full policy)                   │ │
+│     │  c) Resource limits (rlimits)                           │ │
+│     │     • RLIMIT_DATA: 256 MiB memory                       │ │
+│     │     • RLIMIT_CPU: timeout * 2 + 60s                     │ │
+│     │     • RLIMIT_NPROC: 64 processes                        │ │
+│     │     • RLIMIT_NOFILE: 256 file descriptors               │ │
+│     │     • RLIMIT_FSIZE: 16 MiB output                       │ │
+│     │     • RLIMIT_CORE: 0 (disabled)                         │ │
+│     │     • RLIMIT_STACK: 8 MiB                               │ │
 │     └─────────────────────────────────────────────────────────┘ │
 │     ┌─────────────────────────────────────────────────────────┐ │
-│     │  d) Resource limits (rlimits)                           │ │
-│     │     • RLIMIT_AS: Memory limit                           │ │
-│     │     • RLIMIT_NPROC: Process limit                       │ │
-│     │     • RLIMIT_NOFILE: File descriptor limit              │ │
-│     │     • RLIMIT_FSIZE: Output file size limit              │ │
+│     │  d) Securebits + capability drop                        │ │
+│     │     • Lock NOROOT, NO_SETUID_FIXUP, KEEP_CAPS,          │ │
+│     │       NO_CAP_AMBIENT_RAISE                              │ │
+│     │     • Drop all 64 capabilities                          │ │
 │     └─────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  5. EXECVE TARGET PROGRAM                                        │
-│     execve("/usr/bin/python", ["python", "-c", code], env)      │
+│  5. SECCOMP FILTERS                                              │
+│     • [Optional] Install notify filter for FS syscall            │
+│       interception, send listener fd to parent via SCM_RIGHTS   │
+│     • Install kill filter — whitelist of ~100 safe syscalls     │
+│     • Argument filtering: clone flags, socket domains, ioctls   │
+│     • Violation = SECCOMP_RET_KILL_PROCESS (SIGSYS)             │
+└──────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  6. SIGNAL PARENT + WAIT + EXEC                                  │
+│     • Signal parent readiness (eventfd)                          │
+│     • Wait for parent go-ahead (eventfd)                        │
+│     • close_range(3, MAX, 0) — close all fds except 0,1,2      │
+│     • execve(binary, args, env)                                  │
 │                                                                  │
-│     • All isolation is now permanent                            │
-│     • Seccomp filter cannot be removed                          │
-│     • Landlock rules cannot be relaxed                          │
+│     All isolation is now permanent and cannot be undone.         │
 └──────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  6. PARENT MONITORS                                              │
+│  7. PARENT MONITORS                                              │
 │     • Poll pidfd for process exit                               │
 │     • Read stdout/stderr via pipes                              │
 │     • Enforce timeout (kill if exceeded)                        │
-│     • Track output size (truncate if exceeded)                  │
+│     • Track output size (kill if exceeded)                      │
 └──────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  7. CLEANUP                                                      │
+│  8. CLEANUP                                                      │
 │     • Collect exit status                                        │
 │     • Remove workspace tempdir                                   │
 │     • Return Output { stdout, stderr, exit_code, signal }       │
@@ -245,7 +247,7 @@ loop {
 
 ## Security Architecture
 
-evalbox implements **defense in depth** with 7 independent isolation layers:
+evalbox implements **defense in depth** with independent isolation mechanisms:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -254,42 +256,16 @@ evalbox implements **defense in depth** with 7 independent isolation layers:
           │
           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 1: User Namespace                                     │
-│  • UID 0 inside = real user outside                         │
-│  • No capabilities in parent namespace                      │
+│  Landlock v5                                                 │
+│  • Filesystem: read-only system paths, read-write workspace │
+│  • Network: block TCP bind + connect (ABI 4+)               │
+│  • Signals: block cross-sandbox signals (ABI 5)             │
+│  • IPC: block abstract unix sockets (ABI 5)                 │
 └─────────────────────────────────────────────────────────────┘
           │
           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 2: PID Namespace                                      │
-│  • Isolated process tree (PID 1 inside)                     │
-│  • Cannot see/signal host processes                         │
-└─────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 3: Network Namespace                                  │
-│  • Empty by default (no interfaces)                         │
-│  • Cannot access host network                               │
-└─────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 4: Mount Namespace + pivot_root                       │
-│  • Minimal rootfs (no /proc, /sys, /home)                   │
-│  • Host filesystem completely unmounted                     │
-└─────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 5: Landlock LSM                                       │
-│  • Kernel-enforced filesystem rules                         │
-│  • Read-only binaries, read-write workspace only            │
-└─────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 6: Seccomp BPF                                        │
+│  Seccomp BPF                                                 │
 │  • ~100 allowed syscalls (whitelist)                        │
 │  • Blocks ptrace, mount, clone(NEWUSER), AF_NETLINK         │
 │  • SIGSYS on violation (immediate termination)              │
@@ -297,12 +273,20 @@ evalbox implements **defense in depth** with 7 independent isolation layers:
           │
           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 7: Resource Limits                                    │
+│  Resource Limits                                             │
 │  • Memory, CPU, processes, file descriptors                 │
 │  • Prevents DoS attacks                                      │
 └─────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Privilege Hardening                                         │
+│  • NO_NEW_PRIVS — cannot gain privileges via exec           │
+│  • Securebits locked — cannot regain capabilities           │
+│  • All 64 capabilities dropped                              │
+└─────────────────────────────────────────────────────────────┘
 
-For detailed security policy and threat model, see SECURITY.md
+For detailed security policy and threat model, see SECURITY_MODEL.md
 ```
 
 ---
@@ -344,7 +328,7 @@ BPF Program Flow:
                KILL ALLOW  KILL ALLOW  KILL ALLOW ALLOW KILL
 ```
 
-For the complete syscall policy, see [SECURITY.md](SECURITY.md#syscall-policy).
+For the complete syscall policy, see [SECURITY_MODEL.md](SECURITY_MODEL.md#syscall-policy).
 
 ---
 
@@ -352,30 +336,14 @@ For the complete syscall policy, see [SECURITY.md](SECURITY.md#syscall-policy).
 
 ```
 /tmp/evalbox-XXXXX/           Workspace root (tmpdir)
-├── root/                     New root filesystem
-│   ├── work/                 User workspace (read-write)
-│   │   ├── script.py         User files
-│   │   └── data.json
-│   ├── tmp/                  Temporary files (read-write)
-│   ├── etc/                  Minimal config
-│   │   ├── passwd            nobody user
-│   │   ├── group             nogroup
-│   │   ├── hosts             localhost
-│   │   └── resolv.conf       DNS (if network enabled)
-│   ├── dev/                  Minimal devices
-│   │   ├── null
-│   │   ├── zero
-│   │   ├── urandom
-│   │   └── fd → /proc/self/fd
-│   ├── usr/ ──────────────── Bind mount (read-only)
-│   ├── lib/ ──────────────── Bind mount (read-only)
-│   ├── lib64/ ────────────── Bind mount (read-only)
-│   └── bin/ ──────────────── Symlink to /usr/bin
-│
-├── stdin                     Input pipe
-├── stdout                    Output pipe
-└── stderr                    Error pipe
+├── work/                     User workspace (read-write via Landlock)
+│   ├── script.py             User files
+│   └── data.json
+├── tmp/                      Temporary files (read-write via Landlock)
+└── home/                     Home directory (read-write via Landlock)
 ```
+
+The workspace is a plain tempdir. No `pivot_root`, no bind mounts, no special rootfs. Landlock rules control which real filesystem paths are accessible.
 
 ---
 
@@ -384,26 +352,26 @@ For the complete syscall policy, see [SECURITY.md](SECURITY.md#syscall-policy).
 ### 1. Simple as eval()
 ```rust
 // One function call to run code safely
-let output = python::run("print('hello')", &config)?;
+let output = python::run("print('hello')").exec()?;
 ```
 
 ### 2. Defense in Depth
-Every isolation mechanism works independently. A bypass of one layer doesn't compromise the sandbox. See [SECURITY.md](SECURITY.md#defense-in-depth).
+Each isolation mechanism works independently. Landlock controls filesystem and network access, seccomp blocks dangerous syscalls, rlimits prevent resource exhaustion. See [SECURITY_MODEL.md](SECURITY_MODEL.md#defense-in-depth).
 
 ### 3. Unprivileged
 - No root required
 - No daemon/service
-- Uses user namespaces
+- No namespaces needed — Landlock + seccomp work unprivileged with `NO_NEW_PRIVS`
 
 ### 4. Minimal Attack Surface
 - Small syscall whitelist (~100 syscalls)
-- Minimal filesystem
-- No /proc, /sys by default
+- Landlock restricts filesystem to minimal paths
+- All capabilities dropped
 
 ### 5. Fast
 - ~5ms sandbox creation
-- No VM boot
-- No container image pull
+- No VM boot, no container image pull
+- Plain `fork()` + lockdown
 
 ### 6. Embeddable
 - Library, not a service
@@ -414,12 +382,11 @@ Every isolation mechanism works independently. A bypass of one layer doesn't com
 
 ## System Requirements
 
-| Requirement | Minimum | Recommended |
-|-------------|---------|-------------|
-| Linux Kernel | 5.13 | 6.1+ |
-| User Namespaces | Required | - |
-| Landlock | Required (ABI 1) | ABI 4 |
-| Seccomp | Required | - |
+| Requirement | Minimum |
+|-------------|---------|
+| Linux Kernel | 6.12 |
+| Landlock | ABI 5 |
+| Seccomp | Required |
 
 Check compatibility:
 ```bash
@@ -430,8 +397,7 @@ evalbox check
 
 ## References
 
-- [SECURITY.md](SECURITY.md) - Detailed security model and threat analysis
-- [ROADMAP.md](ROADMAP.md) - Planned features
-- [Linux namespaces](https://man7.org/linux/man-pages/man7/namespaces.7.html)
+- [Security Model](SECURITY_MODEL.md) - Detailed security model and threat analysis
+- [Roadmap](ROADMAP.md) - Planned features
 - [Landlock LSM](https://docs.kernel.org/userspace-api/landlock.html)
 - [Seccomp BPF](https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html)

@@ -39,7 +39,7 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::{self, Write as _};
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use mio::unix::SourceFd;
@@ -48,14 +48,16 @@ use rustix::io::Errno;
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 use thiserror::Error;
 
-use evalbox_sys::{check, last_errno};
-
-use crate::isolation::{
-    LockdownError, bind_mount, lockdown, make_rprivate, mount_minimal_dev, mount_proc,
-    pivot_root_and_cleanup, set_hostname, setup_id_maps,
+use evalbox_sys::seccomp::{
+    DEFAULT_WHITELIST, NOTIFY_FS_SYSCALLS, SockFprog, build_notify_filter, build_whitelist_filter,
 };
+use evalbox_sys::seccomp_notify::seccomp_set_mode_filter_listener;
+use evalbox_sys::{check, last_errno, seccomp::seccomp_set_mode_filter};
+
+use crate::isolation::{LockdownError, close_extra_fds, lockdown};
 use crate::monitor::{Output, Status, monitor, set_nonblocking, wait_for_exit, write_stdin};
-use crate::plan::{Mount, Plan};
+use crate::notify::scm_rights;
+use crate::plan::{Mount, NotifyMode, Plan};
 use crate::resolve::{ResolvedBinary, resolve_binary};
 use crate::validate::validate_cmd;
 use crate::workspace::Workspace;
@@ -75,15 +77,6 @@ pub enum ExecutorError {
     #[error("fork: {0}")]
     Fork(Errno),
 
-    #[error("unshare: {0}")]
-    Unshare(Errno),
-
-    #[error("id map: {0}")]
-    IdMap(io::Error),
-
-    #[error("rootfs: {0}")]
-    Rootfs(Errno),
-
     #[error("lockdown: {0}")]
     Lockdown(#[from] LockdownError),
 
@@ -101,6 +94,9 @@ pub enum ExecutorError {
 
     #[error("command not found: {0}")]
     CommandNotFound(String),
+
+    #[error("seccomp notify: {0}")]
+    SeccompNotify(String),
 
     #[error("io: {0}")]
     Io(#[from] io::Error),
@@ -155,12 +151,17 @@ impl ExecutionInfo {
 }
 
 /// A spawned sandbox that hasn't been waited on yet.
+///
+/// Some fields are never read but kept alive for RAII (fd lifetime, temp dir cleanup).
+#[allow(dead_code)]
 struct SpawnedSandbox {
     pidfd: OwnedFd,
     stdin_fd: RawFd,
     stdout_fd: RawFd,
     stderr_fd: RawFd,
-    #[allow(dead_code)]
+    /// Seccomp listener fd kept alive for RAII; future supervisor integration.
+    notify_fd: Option<OwnedFd>,
+    /// Workspace kept alive so temp directory isn't deleted while sandbox runs.
     workspace: std::mem::ManuallyDrop<Workspace>,
 }
 
@@ -235,15 +236,22 @@ impl Executor {
 
         let workspace = Workspace::with_prefix("evalbox-").map_err(ExecutorError::Workspace)?;
 
-        for file in &plan.user_files {
-            workspace
-                .write_file(&file.path, &file.content, file.executable)
-                .map_err(ExecutorError::Workspace)?;
-        }
         workspace
             .setup_sandbox_dirs()
             .map_err(ExecutorError::Workspace)?;
-        create_mount_dirs(&workspace, &exec_info, &plan)?;
+        for file in &plan.user_files {
+            let work_path = format!("work/{}", file.path);
+            workspace
+                .write_file(&work_path, &file.content, file.executable)
+                .map_err(ExecutorError::Workspace)?;
+        }
+
+        // Create socketpair for notify fd transfer (if needed)
+        let notify_sockets = if plan.notify_mode != NotifyMode::Disabled {
+            Some(scm_rights::create_socketpair().map_err(ExecutorError::Workspace)?)
+        } else {
+            None
+        };
 
         let child_pid = unsafe { libc::fork() };
         if child_pid < 0 {
@@ -251,7 +259,9 @@ impl Executor {
         }
 
         if child_pid == 0 {
-            match child_process(&workspace, &plan, &exec_info) {
+            // In child: close parent's socket end
+            let child_socket = notify_sockets.map(|(_, child)| child);
+            match child_process(&workspace, &plan, &exec_info, child_socket.as_ref()) {
                 Ok(()) => unsafe { libc::_exit(127) },
                 Err(e) => {
                     writeln!(io::stderr(), "sandbox error: {e}").ok();
@@ -263,7 +273,22 @@ impl Executor {
         let pid = unsafe { Pid::from_raw_unchecked(child_pid) };
         let pidfd = pidfd_open(pid, PidfdFlags::empty()).map_err(ExecutorError::Pidfd)?;
 
-        blocking_parent(child_pid, pidfd, workspace, plan)
+        // Parent: receive notify fd if applicable
+        let notify_fd = if let Some((parent_socket, _)) = notify_sockets {
+            poll_or_kill(
+                parent_socket.as_raw_fd(),
+                child_pid,
+                "timeout waiting for notify fd",
+            )?;
+            Some(
+                scm_rights::recv_fd(parent_socket.as_raw_fd())
+                    .map_err(|e| ExecutorError::SeccompNotify(e.to_string()))?,
+            )
+        } else {
+            None
+        };
+
+        blocking_parent(child_pid, pidfd, notify_fd, workspace, plan)
     }
 
     /// Spawn a new sandbox. Returns immediately with a [`SandboxId`].
@@ -534,6 +559,50 @@ impl Executor {
     }
 }
 
+/// Close the parent-side pipe ends that the child uses (stdin read, stdout write, stderr write).
+fn close_parent_pipe_ends(workspace: &Workspace) {
+    unsafe {
+        libc::close(workspace.pipes.stdin.read.as_raw_fd());
+        libc::close(workspace.pipes.stdout.write.as_raw_fd());
+        libc::close(workspace.pipes.stderr.write.as_raw_fd());
+    }
+}
+
+/// Poll an fd with a 30-second timeout; kill the child on timeout or error.
+fn poll_or_kill(fd: RawFd, child_pid: libc::pid_t, msg: &str) -> Result<(), ExecutorError> {
+    let mut pfd = libc::pollfd {
+        fd,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    if unsafe { libc::poll(&mut pfd, 1, 30000) } <= 0 {
+        unsafe { libc::kill(child_pid, libc::SIGKILL) };
+        return Err(ExecutorError::ChildSetup(msg.into()));
+    }
+    Ok(())
+}
+
+/// Wait for the child to signal readiness via eventfd, then signal back.
+fn sync_with_child(workspace: &Workspace, child_pid: libc::pid_t) -> Result<(), ExecutorError> {
+    let child_ready_fd = workspace.pipes.sync.child_ready_fd();
+    poll_or_kill(child_ready_fd, child_pid, "timeout waiting for child")?;
+
+    let mut value: u64 = 0;
+    if unsafe { libc::read(child_ready_fd, (&mut value as *mut u64).cast(), 8) } != 8 {
+        unsafe { libc::kill(child_pid, libc::SIGKILL) };
+        return Err(ExecutorError::ChildSetup("eventfd read failed".into()));
+    }
+
+    let parent_done_fd = workspace.pipes.sync.parent_done_fd();
+    let signal_value: u64 = 1;
+    if unsafe { libc::write(parent_done_fd, (&signal_value as *const u64).cast(), 8) } != 8 {
+        unsafe { libc::kill(child_pid, libc::SIGKILL) };
+        return Err(ExecutorError::ChildSetup("eventfd write failed".into()));
+    }
+
+    Ok(())
+}
+
 fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
     let cmd_refs: Vec<&str> = plan.cmd.iter().map(|s| s.as_str()).collect();
     validate_cmd(&cmd_refs).map_err(ExecutorError::Validation)?;
@@ -552,15 +621,22 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
 
     let workspace = Workspace::with_prefix("evalbox-").map_err(ExecutorError::Workspace)?;
 
-    for file in &plan.user_files {
-        workspace
-            .write_file(&file.path, &file.content, file.executable)
-            .map_err(ExecutorError::Workspace)?;
-    }
     workspace
         .setup_sandbox_dirs()
         .map_err(ExecutorError::Workspace)?;
-    create_mount_dirs(&workspace, &exec_info, &plan)?;
+    for file in &plan.user_files {
+        let work_path = format!("work/{}", file.path);
+        workspace
+            .write_file(&work_path, &file.content, file.executable)
+            .map_err(ExecutorError::Workspace)?;
+    }
+
+    // Create socketpair for notify fd transfer (if needed)
+    let notify_sockets = if plan.notify_mode != NotifyMode::Disabled {
+        Some(scm_rights::create_socketpair().map_err(ExecutorError::Workspace)?)
+    } else {
+        None
+    };
 
     let child_pid = unsafe { libc::fork() };
     if child_pid < 0 {
@@ -568,7 +644,8 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
     }
 
     if child_pid == 0 {
-        match child_process(&workspace, &plan, &exec_info) {
+        let child_socket = notify_sockets.map(|(_, child)| child);
+        match child_process(&workspace, &plan, &exec_info, child_socket.as_ref()) {
             Ok(()) => unsafe { libc::_exit(127) },
             Err(e) => {
                 writeln!(io::stderr(), "sandbox error: {e}").ok();
@@ -580,47 +657,28 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
     let pid = unsafe { Pid::from_raw_unchecked(child_pid) };
     let pidfd = pidfd_open(pid, PidfdFlags::empty()).map_err(ExecutorError::Pidfd)?;
 
-    // Parent: close unused pipe ends
     let stdin_write_fd = workspace.pipes.stdin.write.as_raw_fd();
     let stdout_read_fd = workspace.pipes.stdout.read.as_raw_fd();
     let stderr_read_fd = workspace.pipes.stderr.read.as_raw_fd();
 
-    unsafe {
-        libc::close(workspace.pipes.stdin.read.as_raw_fd());
-        libc::close(workspace.pipes.stdout.write.as_raw_fd());
-        libc::close(workspace.pipes.stderr.write.as_raw_fd());
-    }
+    close_parent_pipe_ends(&workspace);
 
-    // Wait for child to signal readiness
-    let child_ready_fd = workspace.pipes.sync.child_ready_fd();
-    let mut pfd = libc::pollfd {
-        fd: child_ready_fd,
-        events: libc::POLLIN,
-        revents: 0,
+    // Receive notify fd from child if applicable
+    let notify_fd = if let Some((parent_socket, _)) = notify_sockets {
+        poll_or_kill(
+            parent_socket.as_raw_fd(),
+            child_pid,
+            "timeout waiting for notify fd",
+        )?;
+        Some(
+            scm_rights::recv_fd(parent_socket.as_raw_fd())
+                .map_err(|e| ExecutorError::SeccompNotify(e.to_string()))?,
+        )
+    } else {
+        None
     };
 
-    if unsafe { libc::poll(&mut pfd, 1, 30000) } <= 0 {
-        unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup(
-            "timeout waiting for child".into(),
-        ));
-    }
-
-    let mut value: u64 = 0;
-    if unsafe { libc::read(child_ready_fd, (&mut value as *mut u64).cast(), 8) } != 8 {
-        unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup("eventfd read failed".into()));
-    }
-
-    setup_id_maps(child_pid).map_err(ExecutorError::IdMap)?;
-
-    // Signal child to continue
-    let parent_done_fd = workspace.pipes.sync.parent_done_fd();
-    let signal_value: u64 = 1;
-    if unsafe { libc::write(parent_done_fd, (&signal_value as *const u64).cast(), 8) } != 8 {
-        unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup("eventfd write failed".into()));
-    }
+    sync_with_child(&workspace, child_pid)?;
 
     // Write stdin if provided
     if let Some(ref stdin_data) = plan.stdin {
@@ -647,6 +705,7 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
         },
         stdout_fd: stdout_read_fd,
         stderr_fd: stderr_read_fd,
+        notify_fd,
         workspace: std::mem::ManuallyDrop::new(workspace),
     })
 }
@@ -654,45 +713,15 @@ fn spawn_sandbox(plan: Plan) -> Result<SpawnedSandbox, ExecutorError> {
 fn blocking_parent(
     child_pid: libc::pid_t,
     pidfd: OwnedFd,
+    _notify_fd: Option<OwnedFd>,
     workspace: Workspace,
     plan: Plan,
 ) -> Result<Output, ExecutorError> {
     let workspace = std::mem::ManuallyDrop::new(workspace);
 
-    unsafe {
-        libc::close(workspace.pipes.stdin.read.as_raw_fd());
-        libc::close(workspace.pipes.stdout.write.as_raw_fd());
-        libc::close(workspace.pipes.stderr.write.as_raw_fd());
-    }
+    close_parent_pipe_ends(&workspace);
 
-    let child_ready_fd = workspace.pipes.sync.child_ready_fd();
-    let mut pfd = libc::pollfd {
-        fd: child_ready_fd,
-        events: libc::POLLIN,
-        revents: 0,
-    };
-
-    if unsafe { libc::poll(&mut pfd, 1, 30000) } <= 0 {
-        unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup(
-            "timeout waiting for child".into(),
-        ));
-    }
-
-    let mut value: u64 = 0;
-    if unsafe { libc::read(child_ready_fd, (&mut value as *mut u64).cast(), 8) } != 8 {
-        unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup("eventfd read failed".into()));
-    }
-
-    setup_id_maps(child_pid).map_err(ExecutorError::IdMap)?;
-
-    let parent_done_fd = workspace.pipes.sync.parent_done_fd();
-    let signal_value: u64 = 1;
-    if unsafe { libc::write(parent_done_fd, (&signal_value as *const u64).cast(), 8) } != 8 {
-        unsafe { libc::kill(child_pid, libc::SIGKILL) };
-        return Err(ExecutorError::ChildSetup("eventfd write failed".into()));
-    }
+    sync_with_child(&workspace, child_pid)?;
 
     if let Some(ref stdin_data) = plan.stdin {
         write_stdin(&workspace, stdin_data).map_err(ExecutorError::Monitor)?;
@@ -711,98 +740,91 @@ fn blocking_parent(
     result
 }
 
+/// Child process flow (runs after fork in the child).
+///
+/// 1. Close parent pipe ends
+/// 2. Setup stdio (dup2 stdin/stdout/stderr)
+/// 3. chdir(workspace/work)
+/// 4. Landlock v5 + rlimits + securebits + drop caps (lockdown)
+/// 5. If `notify_mode` != Disabled: install notify filter, send listener fd
+/// 6. Install kill seccomp filter (whitelist)
+/// 7. Signal parent readiness
+/// 8. Wait for parent signal
+/// 9. `close_range(3, MAX, 0)`
+/// 10. execve
 fn child_process(
     workspace: &Workspace,
     plan: &Plan,
     exec_info: &ExecutionInfo,
+    notify_socket: Option<&OwnedFd>,
 ) -> Result<(), ExecutorError> {
+    // 1. Close parent pipe ends
     unsafe {
         libc::close(workspace.pipes.stdin.write.as_raw_fd());
         libc::close(workspace.pipes.stdout.read.as_raw_fd());
         libc::close(workspace.pipes.stderr.read.as_raw_fd());
     }
 
-    if unsafe { libc::unshare(libc::CLONE_NEWUSER) } != 0 {
-        return Err(ExecutorError::Unshare(last_errno()));
+    // 2. Setup stdio
+    setup_stdio(workspace)?;
+
+    // 3. chdir to workspace/work
+    let work_dir = workspace.root().join("work");
+    let work_cstr = CString::new(work_dir.to_string_lossy().as_bytes())
+        .map_err(|_| ExecutorError::Exec(Errno::INVAL))?;
+    if unsafe { libc::chdir(work_cstr.as_ptr()) } != 0 {
+        return Err(ExecutorError::Exec(last_errno()));
     }
 
+    // 4. Apply lockdown (Landlock v5 + rlimits + securebits + drop caps)
+    let extra_paths: Vec<&str> = exec_info
+        .extra_mounts
+        .iter()
+        .filter_map(|m| m.source.to_str())
+        .collect();
+    lockdown(plan, workspace.root(), &extra_paths).map_err(ExecutorError::Lockdown)?;
+
+    // 5. If notify mode != Disabled: install notify seccomp filter, send listener fd
+    if plan.notify_mode != NotifyMode::Disabled {
+        let notify_filter = build_notify_filter(NOTIFY_FS_SYSCALLS);
+        let fprog = SockFprog {
+            len: notify_filter.len() as u16,
+            filter: notify_filter.as_ptr(),
+        };
+        let listener_fd = unsafe { seccomp_set_mode_filter_listener(&fprog) }.map_err(|e| {
+            ExecutorError::SeccompNotify(format!("failed to install notify filter: {e}"))
+        })?;
+
+        // Send listener fd to parent via SCM_RIGHTS
+        if let Some(sock) = notify_socket {
+            scm_rights::send_fd(sock.as_raw_fd(), listener_fd.as_raw_fd()).map_err(|e| {
+                ExecutorError::SeccompNotify(format!("failed to send listener fd: {e}"))
+            })?;
+        }
+    }
+
+    // 6. Install kill seccomp filter (whitelist)
+    apply_seccomp(plan)?;
+
+    // 7. Signal parent readiness
     let child_ready_fd = workspace.pipes.sync.child_ready_fd();
     let signal_value: u64 = 1;
     if unsafe { libc::write(child_ready_fd, (&signal_value as *const u64).cast(), 8) } != 8 {
         return Err(ExecutorError::ChildSetup("eventfd write failed".into()));
     }
 
+    // 8. Wait for parent signal
     let parent_done_fd = workspace.pipes.sync.parent_done_fd();
     let mut value: u64 = 0;
     if unsafe { libc::read(parent_done_fd, (&mut value as *mut u64).cast(), 8) } != 8 {
         return Err(ExecutorError::ChildSetup("eventfd read failed".into()));
     }
 
-    if unsafe { libc::unshare(libc::CLONE_NEWNS | libc::CLONE_NEWUTS | libc::CLONE_NEWIPC) } != 0 {
-        return Err(ExecutorError::Unshare(last_errno()));
-    }
+    // 9. Close all fds except 0,1,2
+    close_extra_fds();
 
-    setup_rootfs(workspace, plan, exec_info)?;
-    setup_stdio(workspace)?;
-
-    let extra_paths: Vec<&str> = exec_info
-        .extra_mounts
-        .iter()
-        .filter_map(|m| m.target.to_str())
-        .collect();
-    lockdown(plan, None, &extra_paths).map_err(ExecutorError::Lockdown)?;
-
-    let cwd = CString::new(plan.cwd.as_bytes()).map_err(|_| ExecutorError::Exec(Errno::INVAL))?;
-    if unsafe { libc::chdir(cwd.as_ptr()) } != 0 {
-        return Err(ExecutorError::Exec(last_errno()));
-    }
-
+    // 10. execve
     exec_command(plan, exec_info)
-}
-
-fn setup_rootfs(
-    workspace: &Workspace,
-    plan: &Plan,
-    exec_info: &ExecutionInfo,
-) -> Result<(), ExecutorError> {
-    let sandbox_root = workspace.root();
-
-    make_rprivate().map_err(ExecutorError::Rootfs)?;
-
-    for mount in &exec_info.extra_mounts {
-        let target = sandbox_root.join(mount.target.strip_prefix("/").unwrap_or(&mount.target));
-        if mount.source.exists() {
-            bind_mount(&mount.source, &target, !mount.writable).map_err(ExecutorError::Rootfs)?;
-        }
-    }
-
-    for mount in &plan.mounts {
-        let target = sandbox_root.join(mount.target.strip_prefix("/").unwrap_or(&mount.target));
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent).map_err(ExecutorError::Workspace)?;
-        }
-        std::fs::create_dir_all(&target).map_err(ExecutorError::Workspace)?;
-        if mount.source.exists() {
-            bind_mount(&mount.source, &target, !mount.writable).map_err(ExecutorError::Rootfs)?;
-        }
-    }
-
-    mount_proc(&sandbox_root.join("proc")).map_err(ExecutorError::Rootfs)?;
-    mount_minimal_dev(&sandbox_root.join("dev")).map_err(ExecutorError::Rootfs)?;
-
-    for file in &plan.user_files {
-        let target_path = if file.path.starts_with('/') {
-            file.path[1..].to_string()
-        } else {
-            format!("work/{}", file.path)
-        };
-        workspace
-            .write_file(&target_path, &file.content, file.executable)
-            .map_err(ExecutorError::Workspace)?;
-    }
-
-    set_hostname("sandbox").map_err(ExecutorError::Rootfs)?;
-    pivot_root_and_cleanup(sandbox_root).map_err(ExecutorError::Rootfs)
 }
 
 fn setup_stdio(workspace: &Workspace) -> Result<(), ExecutorError> {
@@ -824,6 +846,33 @@ fn setup_stdio(workspace: &Workspace) -> Result<(), ExecutorError> {
             return Err(ExecutorError::Exec(last_errno()));
         }
     }
+    Ok(())
+}
+
+fn apply_seccomp(plan: &Plan) -> Result<(), ExecutorError> {
+    let whitelist: Vec<i64> = if let Some(ref syscalls) = plan.syscalls {
+        let mut wl: Vec<i64> = DEFAULT_WHITELIST
+            .iter()
+            .copied()
+            .filter(|s| !syscalls.denied.contains(s))
+            .collect();
+        for s in &syscalls.allowed {
+            if !wl.contains(s) {
+                wl.push(*s);
+            }
+        }
+        wl
+    } else {
+        DEFAULT_WHITELIST.to_vec()
+    };
+
+    let filter = build_whitelist_filter(&whitelist);
+    let fprog = SockFprog {
+        len: filter.len() as u16,
+        filter: filter.as_ptr(),
+    };
+    unsafe { seccomp_set_mode_filter(&fprog) }
+        .map_err(|e| ExecutorError::Lockdown(LockdownError::Seccomp(e)))?;
     Ok(())
 }
 
@@ -859,36 +908,6 @@ fn exec_command(plan: &Plan, exec_info: &ExecutionInfo) -> Result<(), ExecutorEr
     unsafe { libc::execve(cmd_path.as_ptr(), argv_ptrs.as_ptr(), envp_ptrs.as_ptr()) };
 
     Err(ExecutorError::Exec(last_errno()))
-}
-
-fn create_mount_dirs(
-    workspace: &Workspace,
-    exec_info: &ExecutionInfo,
-    plan: &Plan,
-) -> Result<(), ExecutorError> {
-    for mount in &exec_info.extra_mounts {
-        create_mount_dir(workspace, &mount.target)?;
-    }
-    for mount in &plan.mounts {
-        create_mount_dir(workspace, &mount.target)?;
-    }
-    Ok(())
-}
-
-fn create_mount_dir(workspace: &Workspace, target: &Path) -> Result<(), ExecutorError> {
-    if let Some(parent) = target.parent() {
-        if parent != Path::new("/") {
-            let target_dir = workspace
-                .root()
-                .join(parent.strip_prefix("/").unwrap_or(parent));
-            std::fs::create_dir_all(&target_dir).map_err(ExecutorError::Workspace)?;
-        }
-    }
-    let mount_point = workspace
-        .root()
-        .join(target.strip_prefix("/").unwrap_or(target));
-    std::fs::create_dir_all(&mount_point).map_err(ExecutorError::Workspace)?;
-    Ok(())
 }
 
 #[cfg(test)]

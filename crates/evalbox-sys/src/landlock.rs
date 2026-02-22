@@ -12,6 +12,7 @@
 //! | 2 | 5.19 | `REFER` (cross-directory rename/link) |
 //! | 3 | 6.2 | `TRUNCATE` (file truncation) |
 //! | 4 | 6.7 | `IOCTL_DEV`, TCP network access |
+//! | 5 | 6.12 | `SCOPE_SIGNAL`, `SCOPE_ABSTRACT_UNIX_SOCKET` |
 //!
 //! ## Usage
 //!
@@ -75,11 +76,19 @@ pub const LANDLOCK_ACCESS_FS_IOCTL_DEV: u64 = 1 << 15;
 pub const LANDLOCK_ACCESS_NET_BIND_TCP: u64 = 1 << 0;
 pub const LANDLOCK_ACCESS_NET_CONNECT_TCP: u64 = 1 << 1;
 
+// ABI v5 - Scoped restrictions
+/// Block abstract unix socket connections outside the sandbox.
+pub const LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET: u64 = 1 << 0;
+/// Block signals to processes outside the sandbox.
+pub const LANDLOCK_SCOPE_SIGNAL: u64 = 1 << 1;
+
 #[repr(C)]
 #[derive(Debug, Default)]
 pub struct LandlockRulesetAttr {
     pub handled_access_fs: u64,
     pub handled_access_net: u64,
+    /// ABI 5+: Scoped restrictions (signal and abstract unix socket isolation).
+    pub scoped: u64,
 }
 
 #[repr(C)]
@@ -200,6 +209,18 @@ pub fn fs_access_for_abi(abi: u32) -> u64 {
 pub fn net_access_for_abi(abi: u32) -> u64 {
     if abi >= 4 {
         LANDLOCK_ACCESS_NET_BIND_TCP | LANDLOCK_ACCESS_NET_CONNECT_TCP
+    } else {
+        0
+    }
+}
+
+/// Returns the scoped restriction flags for the given ABI version.
+///
+/// ABI 5+ supports signal isolation and abstract unix socket isolation,
+/// replacing the need for PID and IPC namespaces.
+pub fn scope_for_abi(abi: u32) -> u64 {
+    if abi >= 5 {
+        LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET | LANDLOCK_SCOPE_SIGNAL
     } else {
         0
     }

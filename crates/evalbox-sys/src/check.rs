@@ -7,9 +7,8 @@
 //!
 //! | Feature | Minimum | Check Method |
 //! |---------|---------|--------------|
-//! | Kernel | 5.13 | `uname` syscall |
-//! | Landlock | ABI 1 | `landlock_create_ruleset` with VERSION flag |
-//! | User NS | enabled | `/proc/sys/kernel/unprivileged_userns_clone` or fork+unshare test |
+//! | Kernel | 6.12 | `uname` syscall |
+//! | Landlock | ABI 5 | `landlock_create_ruleset` with VERSION flag |
 //! | Seccomp | enabled | `prctl(PR_GET_SECCOMP)` |
 //!
 //! ## Usage
@@ -20,13 +19,6 @@
 //!     Err(e) => eprintln!("System not supported: {}", e),
 //! }
 //! ```
-//!
-//! ## User Namespaces
-//!
-//! User namespace support varies by distribution:
-//! - **Debian/Ubuntu**: `/proc/sys/kernel/unprivileged_userns_clone`
-//! - **NixOS/Fedora**: `/proc/sys/user/max_user_namespaces`
-//! - **Fallback**: Fork + unshare test
 
 use std::sync::OnceLock;
 
@@ -41,7 +33,6 @@ use crate::seccomp;
 pub struct SystemInfo {
     pub kernel_version: (u32, u32, u32),
     pub landlock_abi: u32,
-    pub user_ns_enabled: bool,
     pub seccomp_enabled: bool,
 }
 
@@ -57,8 +48,8 @@ pub enum CheckError {
     #[error("landlock is not available")]
     LandlockNotAvailable,
 
-    #[error("user namespaces are disabled")]
-    UserNamespacesDisabled,
+    #[error("landlock ABI {found} is too old, need at least ABI {required}")]
+    LandlockAbiTooOld { required: u32, found: u32 },
 
     #[error("seccomp is not available")]
     SeccompNotAvailable,
@@ -67,8 +58,9 @@ pub enum CheckError {
     KernelVersionReadFailed,
 }
 
-// Minimum kernel version: 5.13 (first with Landlock)
-const MIN_KERNEL_VERSION: (u32, u32, u32) = (5, 13, 0);
+// Minimum kernel version: 6.12 (Landlock ABI 5 with SCOPE_SIGNAL + SCOPE_ABSTRACT_UNIX_SOCKET)
+const MIN_KERNEL_VERSION: (u32, u32, u32) = (6, 12, 0);
+const MIN_LANDLOCK_ABI: u32 = 5;
 
 static SYSTEM_INFO: OnceLock<Result<SystemInfo, CheckError>> = OnceLock::new();
 
@@ -93,10 +85,11 @@ fn check_impl() -> Result<SystemInfo, CheckError> {
     if landlock_abi == 0 {
         return Err(CheckError::LandlockNotAvailable);
     }
-
-    let user_ns_enabled = check_user_namespaces();
-    if !user_ns_enabled {
-        return Err(CheckError::UserNamespacesDisabled);
+    if landlock_abi < MIN_LANDLOCK_ABI {
+        return Err(CheckError::LandlockAbiTooOld {
+            required: MIN_LANDLOCK_ABI,
+            found: landlock_abi,
+        });
     }
 
     let seccomp_enabled = seccomp::seccomp_available();
@@ -107,7 +100,6 @@ fn check_impl() -> Result<SystemInfo, CheckError> {
     Ok(SystemInfo {
         kernel_version,
         landlock_abi,
-        user_ns_enabled,
         seccomp_enabled,
     })
 }
@@ -145,36 +137,6 @@ fn parse_kernel_version(release: &str) -> Result<(u32, u32, u32), CheckError> {
     Ok((major, minor, patch))
 }
 
-fn check_user_namespaces() -> bool {
-    // Check sysctl first (Debian/Ubuntu)
-    if let Ok(content) = std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone") {
-        return content.trim() == "1";
-    }
-
-    // Check max_user_namespaces (NixOS and others)
-    if let Ok(content) = std::fs::read_to_string("/proc/sys/user/max_user_namespaces")
-        && content.trim().parse::<u32>().unwrap_or(0) > 0
-    {
-        return true;
-    }
-
-    // Last resort: fork + unshare test (must fork to avoid polluting parent)
-    // SAFETY: fork/unshare/waitpid are safe when used correctly. Child exits immediately.
-    unsafe {
-        let pid = libc::fork();
-        if pid < 0 {
-            return false;
-        }
-        if pid == 0 {
-            let ret = libc::unshare(libc::CLONE_NEWUSER);
-            libc::_exit(if ret == 0 { 0 } else { 1 });
-        }
-        let mut status: i32 = 0;
-        libc::waitpid(pid, &mut status, 0);
-        libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +149,7 @@ mod tests {
             parse_kernel_version("5.4.0-150-generic").unwrap(),
             (5, 4, 0)
         );
+        assert_eq!(parse_kernel_version("6.12.0").unwrap(), (6, 12, 0));
     }
 
     #[test]
@@ -195,7 +158,6 @@ mod tests {
             Ok(info) => {
                 println!("Kernel version: {:?}", info.kernel_version);
                 println!("Landlock ABI: {}", info.landlock_abi);
-                println!("User NS enabled: {}", info.user_ns_enabled);
                 println!("Seccomp enabled: {}", info.seccomp_enabled);
             }
             Err(e) => {

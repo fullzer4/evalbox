@@ -6,6 +6,9 @@ members = [
     "crates/evalbox-sandbox",
 ]
 
+[workspace.metadata.crane]
+name = "evalbox"
+
 [workspace.package]
 version = "0.1.1"
 edition = "2024"
@@ -30,7 +33,7 @@ rustix = { version = "1", features = ["event", "process", "system", "mount", "fs
 thiserror = "2"
 tempfile = "3"
 mio = { version = "1.0", features = ["os-poll", "os-ext"] }
-which = "7"
+which = "8"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
@@ -39,7 +42,6 @@ unused_must_use = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
-# Useful pedantic lints (not all)
 cast_possible_truncation = "warn"
 cast_sign_loss = "warn"
 cloned_instead_of_copied = "warn"

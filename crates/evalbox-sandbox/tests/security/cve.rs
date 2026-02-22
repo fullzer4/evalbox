@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use evalbox_sandbox::{Executor, Plan};
 
-use crate::common::{SIGSYS, payload, skip_if_no_namespaces};
+use crate::common::{SIGSYS, payload};
 
 // =============================================================================
 // CVE-2024-1086: nf_tables Use-After-Free
@@ -23,13 +23,10 @@ use crate::common::{SIGSYS, payload, skip_if_no_namespaces};
 #[test]
 #[ignore]
 fn test_cve_2024_1086_nftables_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("cve_2024_1086_nftables"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -57,13 +54,10 @@ fn test_cve_2024_1086_nftables_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2022_0185_fsconfig_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("cve_2022_0185_fsconfig"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -91,13 +85,10 @@ fn test_cve_2022_0185_fsconfig_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2017_5226_tiocsti_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("cve_2017_5226_tiocsti"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -125,13 +116,10 @@ fn test_cve_2017_5226_tiocsti_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2022_0492_cgroups_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("cve_2022_0492_cgroups"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -159,13 +147,10 @@ fn test_cve_2022_0492_cgroups_blocked() {
 #[test]
 #[ignore]
 fn test_fileless_memfd_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("fileless_memfd"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -190,13 +175,10 @@ fn test_fileless_memfd_blocked() {
 #[test]
 #[ignore]
 fn test_ioctl_tioclinux_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("ioctl_tioclinux"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -218,13 +200,10 @@ fn test_ioctl_tioclinux_blocked() {
 #[test]
 #[ignore]
 fn test_ioctl_tiocsetd_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("ioctl_tiocsetd"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -250,13 +229,10 @@ fn test_ioctl_tiocsetd_blocked() {
 #[test]
 #[ignore]
 fn test_userns_creation_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("userns_escape"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -284,13 +260,10 @@ fn test_userns_creation_blocked() {
 #[test]
 #[ignore]
 fn test_ptrace_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("ptrace_escape"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -317,13 +290,10 @@ fn test_ptrace_blocked() {
 #[test]
 #[ignore]
 fn test_cve_2019_10063_ioctl_bypass_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("cve_2019_10063_ioctl_bypass"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");

@@ -7,20 +7,17 @@ use std::time::Duration;
 
 use evalbox_sandbox::{Executor, Plan};
 
-use crate::common::{SIGSYS, payload, skip_if_no_namespaces};
+use crate::common::{SIGSYS, payload};
 
 /// Test that a simple payload can execute successfully.
 /// This is a control test to verify the sandbox is working.
 #[test]
 #[ignore]
 fn test_payload_can_execute() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("success"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -39,13 +36,10 @@ fn test_payload_can_execute() {
 #[test]
 #[ignore]
 fn test_ptrace_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("syscall_ptrace"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -64,13 +58,10 @@ fn test_ptrace_blocked() {
 #[test]
 #[ignore]
 fn test_mount_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("syscall_mount"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -89,13 +80,10 @@ fn test_mount_blocked() {
 #[test]
 #[ignore]
 fn test_reboot_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("syscall_reboot"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -114,13 +102,10 @@ fn test_reboot_blocked() {
 #[test]
 #[ignore]
 fn test_clone_newuser_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("syscall_clone_ns"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -139,13 +124,10 @@ fn test_clone_newuser_blocked() {
 #[test]
 #[ignore]
 fn test_socket_netlink_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("socket_netlink"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -164,13 +146,10 @@ fn test_socket_netlink_blocked() {
 #[test]
 #[ignore]
 fn test_socket_raw_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("socket_raw"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -190,13 +169,10 @@ fn test_socket_raw_blocked() {
 #[test]
 #[ignore]
 fn test_keyctl_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("syscall_keyctl"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
@@ -216,13 +192,10 @@ fn test_keyctl_blocked() {
 #[test]
 #[ignore]
 fn test_bpf_blocked() {
-    if skip_if_no_namespaces() {
-        return;
-    }
-
     let output = Executor::run(
-        Plan::new(["/work/payload"])
+        Plan::new(["./payload"])
             .executable("payload", payload("syscall_bpf"))
+            .binary_path("./payload")
             .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
