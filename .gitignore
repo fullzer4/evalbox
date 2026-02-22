@@ -1,3 +1,6 @@
 .direnv
 target/
 bindings/
+
+# Local cargo config
+.cargo/

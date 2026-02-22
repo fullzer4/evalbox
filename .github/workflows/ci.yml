@@ -6,45 +6,56 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: -Dwarnings
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  fmt:
-    name: Format
+  nix-checks:
+    name: Nix Checks
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: rustup component add rustfmt
-      - run: cargo fmt --all --check
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --all-features
+      - uses: DeterminateSystems/determinate-nix-action@v3
 
-  doc:
-    name: Documentation
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: -Dwarnings
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --no-deps --all-features
+      - uses: DeterminateSystems/magic-nix-cache-action@main
 
-  unit-tests:
-    name: Unit Tests
+      - name: Run fast checks (clippy, fmt, test, doc)
+        run: |
+          nix build -L \
+            .#checks.x86_64-linux.clippy \
+            .#checks.x86_64-linux.fmt \
+            .#checks.x86_64-linux.test \
+            .#checks.x86_64-linux.doc
+
+  e2e-docker:
+    name: E2E Docker (${{ matrix.distro }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu:24.04, fedora:41, alpine:3.21]
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --lib --all-features
+
+      - uses: DeterminateSystems/determinate-nix-action@v3
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build test binary
+        run: nix build -L .#checks.x86_64-linux.test
+
+      - name: Run security tests in Docker (${{ matrix.distro }})
+        run: |
+          TEST_BIN=$(find result/ -name 'security_tests-*' -type f -executable | head -1)
+          docker run --rm \
+            -v "$TEST_BIN:/security_tests:ro" \
+            ${{ matrix.distro }} \
+            /security_tests --ignored
 
   semver-check:
     name: SemVer Check
@@ -52,7 +63,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
-      - name: Check semver
-        uses: obi1kenobi/cargo-semver-checks-action@v2
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           package: evalbox
