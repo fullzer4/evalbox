@@ -56,7 +56,11 @@ pub fn send_fd(socket: RawFd, fd: RawFd) -> io::Result<()> {
         (*cmsg).cmsg_type = libc::SCM_RIGHTS;
         (*cmsg).cmsg_len = libc::CMSG_LEN(size_of::<RawFd>() as u32) as usize;
         let data_ptr = libc::CMSG_DATA(cmsg);
-        std::ptr::copy_nonoverlapping((&fd as *const RawFd).cast::<u8>(), data_ptr, size_of::<RawFd>());
+        std::ptr::copy_nonoverlapping(
+            (&fd as *const RawFd).cast::<u8>(),
+            data_ptr,
+            size_of::<RawFd>(),
+        );
     }
 
     let ret = unsafe { libc::sendmsg(socket, &msg, 0) };
@@ -106,7 +110,11 @@ pub fn recv_fd(socket: RawFd) -> io::Result<OwnedFd> {
         }
         let mut fd: RawFd = 0;
         let data_ptr = libc::CMSG_DATA(cmsg);
-        std::ptr::copy_nonoverlapping(data_ptr, (&mut fd as *mut RawFd).cast::<u8>(), size_of::<RawFd>());
+        std::ptr::copy_nonoverlapping(
+            data_ptr,
+            (&mut fd as *mut RawFd).cast::<u8>(),
+            size_of::<RawFd>(),
+        );
         Ok(OwnedFd::from_raw_fd(fd))
     }
 }

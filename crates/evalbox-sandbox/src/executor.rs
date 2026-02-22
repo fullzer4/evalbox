@@ -770,8 +770,8 @@ fn child_process(
 
     // 3. chdir to workspace/work
     let work_dir = workspace.root().join("work");
-    let work_cstr =
-        CString::new(work_dir.to_string_lossy().as_bytes()).map_err(|_| ExecutorError::Exec(Errno::INVAL))?;
+    let work_cstr = CString::new(work_dir.to_string_lossy().as_bytes())
+        .map_err(|_| ExecutorError::Exec(Errno::INVAL))?;
     if unsafe { libc::chdir(work_cstr.as_ptr()) } != 0 {
         return Err(ExecutorError::Exec(last_errno()));
     }

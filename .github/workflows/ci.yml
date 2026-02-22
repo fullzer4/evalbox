@@ -19,43 +19,51 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: DeterminateSystems/determinate-nix-action@v3
-
       - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Run checks (clippy, fmt, test, doc)
+        run: nix flake check -L
 
-      - name: Run fast checks (clippy, fmt, test, doc)
-        run: |
-          nix build -L \
-            .#checks.x86_64-linux.clippy \
-            .#checks.x86_64-linux.fmt \
-            .#checks.x86_64-linux.test \
-            .#checks.x86_64-linux.doc
-
-  e2e-docker:
-    name: E2E Docker (${{ matrix.distro }})
+  build-test-bin:
+    name: Build Security Tests
     runs-on: ubuntu-latest
+    needs: nix-checks
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Build security test binary
+        run: nix build -L .#security-test-bin
+      - name: Upload test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-test-bin
+          path: result/bin/
+
+  e2e:
+    name: E2E (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    needs: build-test-bin
     strategy:
       fail-fast: false
       matrix:
         distro: [ubuntu:24.04, fedora:41, alpine:3.21]
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: DeterminateSystems/determinate-nix-action@v3
-
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-
-      - name: Build test binary
-        run: nix build -L .#checks.x86_64-linux.test
-
-      - name: Run security tests in Docker (${{ matrix.distro }})
+      - uses: actions/download-artifact@v4
+        with:
+          name: security-test-bin
+          path: ./test-bin/
+      - name: Run security tests in ${{ matrix.distro }}
         run: |
-          TEST_BIN=$(find result/ -name 'security_tests-*' -type f -executable | head -1)
-          docker run --rm \
+          chmod +x ./test-bin/*
+          TEST_BIN=$(find ./test-bin/ -type f -executable | head -1)
+          docker run --rm --privileged \
             -v "$TEST_BIN:/security_tests:ro" \
             ${{ matrix.distro }} \
-            /security_tests --ignored
+            /security_tests --ignored --test-threads=1
 
   semver-check:
     name: SemVer Check

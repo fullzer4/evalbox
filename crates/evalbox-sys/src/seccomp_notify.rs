@@ -164,8 +164,13 @@ pub unsafe fn seccomp_set_mode_filter_listener(fprog: &SockFprog) -> Result<Owne
 ///
 /// Returns `Errno` on failure (e.g., `ENOENT` if the target died).
 pub fn notif_recv(listener_fd: i32, notif: &mut SeccompNotif) -> Result<(), Errno> {
-    let ret =
-        unsafe { libc::ioctl(listener_fd, SECCOMP_IOCTL_NOTIF_RECV, notif as *mut SeccompNotif) };
+    let ret = unsafe {
+        libc::ioctl(
+            listener_fd,
+            SECCOMP_IOCTL_NOTIF_RECV,
+            notif as *mut SeccompNotif,
+        )
+    };
     if ret < 0 { Err(last_errno()) } else { Ok(()) }
 }
 
@@ -194,13 +199,7 @@ pub fn notif_send(listener_fd: i32, resp: &SeccompNotifResp) -> Result<(), Errno
 ///
 /// Returns `Errno::NOENT` if the notification is no longer valid.
 pub fn notif_id_valid(listener_fd: i32, id: u64) -> Result<(), Errno> {
-    let ret = unsafe {
-        libc::ioctl(
-            listener_fd,
-            SECCOMP_IOCTL_NOTIF_ID_VALID,
-            &id as *const u64,
-        )
-    };
+    let ret = unsafe { libc::ioctl(listener_fd, SECCOMP_IOCTL_NOTIF_ID_VALID, &id as *const u64) };
     if ret < 0 { Err(last_errno()) } else { Ok(()) }
 }
 

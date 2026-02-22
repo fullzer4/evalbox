@@ -74,7 +74,10 @@ impl Supervisor {
 
         match self.mode {
             NotifyMode::Disabled => {
-                debug_assert!(false, "supervisor received notification with NotifyMode::Disabled");
+                debug_assert!(
+                    false,
+                    "supervisor received notification with NotifyMode::Disabled"
+                );
                 self.respond_continue(&notif)?;
                 Ok(None)
             }
@@ -234,7 +237,8 @@ impl Supervisor {
             buf.truncate(nul_pos);
         }
 
-        String::from_utf8(buf).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid UTF-8 in path"))
+        String::from_utf8(buf)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid UTF-8 in path"))
     }
 }
 

@@ -157,7 +157,11 @@ fn apply_landlock_v5(
     }
 
     // Proc (read-only)
-    add_path_rule(&ruleset_fd, "/proc", read_access & !LANDLOCK_ACCESS_FS_EXECUTE);
+    add_path_rule(
+        &ruleset_fd,
+        "/proc",
+        read_access & !LANDLOCK_ACCESS_FS_EXECUTE,
+    );
 
     // Dev (read + write for /dev/null etc.)
     add_path_rule(

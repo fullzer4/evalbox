@@ -67,7 +67,10 @@ fn test_work_dir_is_writable() {
     )
     .expect("Executor should run");
 
-    assert!(output.success(), "Should be able to write to CWD (work dir)");
+    assert!(
+        output.success(),
+        "Should be able to write to CWD (work dir)"
+    );
     assert_eq!(output.stdout_str().trim(), "test content");
 }
 
@@ -101,10 +104,9 @@ fn test_tmp_is_writable() {
 #[test]
 #[ignore]
 fn test_path_traversal_blocked() {
-    let output = Executor::run(
-        Plan::new(["cat", "../../../etc/shadow"]).timeout(Duration::from_secs(5)),
-    )
-    .expect("Executor should run");
+    let output =
+        Executor::run(Plan::new(["cat", "../../../etc/shadow"]).timeout(Duration::from_secs(5)))
+            .expect("Executor should run");
 
     // Landlock should block access to /etc/shadow (no read on shadow, even via traversal)
     assert!(
@@ -120,12 +122,8 @@ fn test_path_traversal_blocked() {
 #[ignore]
 fn test_symlink_escape_blocked() {
     let output = Executor::run(
-        Plan::new([
-            "sh",
-            "-c",
-            "ln -s /etc/shadow ./shadow && cat ./shadow",
-        ])
-        .timeout(Duration::from_secs(5)),
+        Plan::new(["sh", "-c", "ln -s /etc/shadow ./shadow && cat ./shadow"])
+            .timeout(Duration::from_secs(5)),
     )
     .expect("Executor should run");
 
