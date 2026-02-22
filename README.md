@@ -12,7 +12,7 @@ Execute code like `eval()`, but safe. No containers, no VMs, no root.
 - **Simple** - One function call, security handled for you
 - **Multi-language** - Python, Go, and shell/terminal commands
 - **Fast** - Millisecond startup, no containers or VMs
-- **Secure** - 7 layers of isolation (namespaces, Landlock, seccomp, rlimits)
+- **Secure** - Landlock v5 + seccomp-BPF + rlimits, no namespaces needed
 
 ## Quick Start
 
@@ -38,8 +38,8 @@ let output = shell::run("curl https://example.com")
 
 ## Requirements
 
-- Linux kernel 5.13+ (Landlock ABI 1+)
-- User namespaces enabled
+- Linux kernel 6.12+ (Landlock ABI 5)
+- Seccomp enabled
 
 ## Installation
 
@@ -50,15 +50,16 @@ evalbox = { version = "0.1", features = ["python", "go", "shell"] }
 
 ## Security
 
-7 layers of isolation: user namespaces, PID namespace, network namespace, mount namespace + pivot_root, Landlock LSM, seccomp BPF, rlimits.
+Isolation via Landlock v5 (filesystem + network + signal + IPC scoping), seccomp-BPF (syscall whitelist), rlimits, privilege hardening (NO_NEW_PRIVS, securebits, capability drop).
 
-See [SECURITY.md](docs/SECURITY.md) for threat model and CVE protections.
+See [Security Model](docs/SECURITY_MODEL.md) for threat model and CVE protections.
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [Security Model](docs/SECURITY.md)
+- [Security Model](docs/SECURITY_MODEL.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## License
 

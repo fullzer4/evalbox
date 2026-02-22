@@ -1,5 +1,32 @@
 # Roadmap
 
+## Security Hardening
+
+### Block UDP exfiltration via seccomp
+
+Landlock only controls TCP (`LANDLOCK_ACCESS_NET_{BIND,CONNECT}_TCP`). A sandboxed process can create a `SOCK_DGRAM` socket and `sendto()` data to any IP without Landlock blocking it.
+
+**Fix:** Block `SOCK_DGRAM` in the seccomp socket filter when `plan.network_blocked`. DNS inside the sandbox already doesn't work, so this breaks nothing.
+
+**Tracking:** Landlock ABI v8 RFC patches (Dec 2025) propose `LANDLOCK_ACCESS_NET_{BIND,CONNECT,SENDTO}_UDP`. Once merged, seccomp filtering can be relaxed.
+
+### Restrict /proc access
+
+`/proc` is currently Landlock read-only. Landlock's ptrace scoping already blocks access to `environ`, `maps`, `fd/` of processes outside the sandbox domain. However, `/proc/[pid]/cmdline` is world-readable (`0444`, no ptrace check) — any host process's command line is visible.
+
+**Options:**
+- Remove `/proc` from Landlock entirely (breaks programs that read `/proc/self/`)
+- Accept `cmdline` leak as residual risk (low impact for single-user)
+- Wait for kernel support: `hidepid=` requires mount namespace, Landlock can't target `/proc/self` (magic symlink resolves to fixed inode at `open()` time)
+
+### PID namespace (optional)
+
+Without PID namespace the sandbox can enumerate host PIDs via `/proc`. Combined with `cmdline` being world-readable, this is an information leak. Adding `CLONE_NEWPID` back would fully isolate the process tree, but requires re-introducing namespace setup code.
+
+**Trade-off:** Adds ~0.5ms and complexity. Not needed for single-user code execution, useful for multi-tenant deployments.
+
+---
+
 ## Supervised Execution Mode
 
 Intercept syscalls before execution for AI CLI tools and interactive approval.
