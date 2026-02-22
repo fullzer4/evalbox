@@ -24,30 +24,34 @@ jobs:
       - name: Run checks (clippy, fmt, test, doc)
         run: nix flake check -L
 
-  e2e:
-    name: E2E (${{ matrix.distro }})
-    runs-on: ubuntu-latest
-    needs: nix-checks
-    permissions:
-      id-token: write
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        distro: [ubuntu:24.04, fedora:41, alpine:3.21]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/determinate-nix-action@v3
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-      - name: Build security test binary
-        run: nix build -L .#security-test-bin
-      - name: Run security tests in ${{ matrix.distro }}
-        run: |
-          TEST_BIN=$(realpath result/bin/security_tests-*)
-          docker run --rm --privileged \
-            -v /nix/store:/nix/store:ro \
-            ${{ matrix.distro }} \
-            "$TEST_BIN" --ignored --test-threads=1
+  # E2E security tests require kernel 6.12+ (Landlock ABI v5).
+  # GHA ubuntu-latest currently ships 6.11; image 20260209 has 6.14 but hasn't propagated yet.
+  # Uncomment when runners get kernel 6.12+.
+  #
+  # e2e:
+  #   name: E2E (${{ matrix.distro }})
+  #   runs-on: ubuntu-latest
+  #   needs: nix-checks
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       distro: [ubuntu:24.04, fedora:41, alpine:3.21]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: DeterminateSystems/determinate-nix-action@v3
+  #     - uses: DeterminateSystems/magic-nix-cache-action@main
+  #     - name: Build security test binary
+  #       run: nix build -L .#security-test-bin
+  #     - name: Run security tests in ${{ matrix.distro }}
+  #       run: |
+  #         TEST_BIN=$(realpath result/bin/security_tests-*)
+  #         docker run --rm --privileged \
+  #           -v /nix/store:/nix/store:ro \
+  #           ${{ matrix.distro }} \
+  #           "$TEST_BIN" --ignored --test-threads=1
 
   semver-check:
     name: SemVer Check
